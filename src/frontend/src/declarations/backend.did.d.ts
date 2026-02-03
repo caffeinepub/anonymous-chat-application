@@ -20,6 +20,7 @@ export interface MessageView {
   'isEdited' : boolean,
   'timestamp' : Time,
   'replyToId' : [] | [bigint],
+  'videoUrl' : [] | [ExternalBlob],
   'reactions' : Array<Reaction>,
 }
 export interface Reaction { 'userId' : string, 'emoji' : string }
@@ -61,7 +62,15 @@ export interface _SERVICE {
   'createRoom' : ActorMethod<[string], string>,
   'deleteMessage' : ActorMethod<[string, bigint, string], boolean>,
   'editMessage' : ActorMethod<
-    [string, bigint, string, string, [] | [ExternalBlob], [] | [ExternalBlob]],
+    [
+      string,
+      bigint,
+      string,
+      string,
+      [] | [ExternalBlob],
+      [] | [ExternalBlob],
+      [] | [ExternalBlob],
+    ],
     boolean
   >,
   'getCallerUserProfile' : ActorMethod<[], [] | [UserProfile]>,
@@ -79,6 +88,7 @@ export interface _SERVICE {
       string,
       string,
       [] | [bigint],
+      [] | [ExternalBlob],
       [] | [ExternalBlob],
       [] | [ExternalBlob],
     ],

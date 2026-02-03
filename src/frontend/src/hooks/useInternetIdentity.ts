@@ -198,6 +198,7 @@ export function InternetIdentityProvider({
             .logout()
             .then(() => {
                 setIdentity(undefined);
+                setAuthClient(undefined);
                 setStatus('idle');
                 setError(undefined);
             })
@@ -234,7 +235,7 @@ export function InternetIdentityProvider({
         return () => {
             cancelled = true;
         };
-    }, [createOptions]);
+    }, [createOptions, authClient]);
 
     const value = useMemo<ProviderValue>(
         () => ({

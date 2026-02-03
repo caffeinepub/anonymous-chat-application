@@ -106,6 +106,7 @@ export interface MessageView {
     isEdited: boolean;
     timestamp: Time;
     replyToId?: bigint;
+    videoUrl?: ExternalBlob;
     reactions: Array<Reaction>;
 }
 export interface _CaffeineStorageCreateCertificateResult {
@@ -136,7 +137,7 @@ export interface backendInterface {
     assignCallerUserRole(user: Principal, role: UserRole): Promise<void>;
     createRoom(joinCode: string): Promise<string>;
     deleteMessage(roomId: string, messageId: bigint, userId: string): Promise<boolean>;
-    editMessage(roomId: string, messageId: bigint, userId: string, newContent: string, newImage: ExternalBlob | null, newAudio: ExternalBlob | null): Promise<boolean>;
+    editMessage(roomId: string, messageId: bigint, userId: string, newContent: string, newImage: ExternalBlob | null, newVideo: ExternalBlob | null, newAudio: ExternalBlob | null): Promise<boolean>;
     getCallerUserProfile(): Promise<UserProfile | null>;
     getCallerUserRole(): Promise<UserRole>;
     getMessageTTL(): Promise<Time>;
@@ -145,7 +146,7 @@ export interface backendInterface {
     isCallerAdmin(): Promise<boolean>;
     removeReaction(roomId: string, messageId: bigint, userId: string, emoji: string): Promise<boolean>;
     saveCallerUserProfile(profile: UserProfile): Promise<void>;
-    sendMessage(roomId: string, content: string, nickname: string, userId: string, replyToId: bigint | null, image: ExternalBlob | null, audio: ExternalBlob | null): Promise<bigint>;
+    sendMessage(roomId: string, content: string, nickname: string, userId: string, replyToId: bigint | null, image: ExternalBlob | null, video: ExternalBlob | null, audio: ExternalBlob | null): Promise<bigint>;
 }
 import type { ExternalBlob as _ExternalBlob, MessageView as _MessageView, Reaction as _Reaction, Time as _Time, UserProfile as _UserProfile, UserRole as _UserRole, _CaffeineStorageRefillInformation as __CaffeineStorageRefillInformation, _CaffeineStorageRefillResult as __CaffeineStorageRefillResult } from "./declarations/backend.did.d.ts";
 export class Backend implements backendInterface {
@@ -304,17 +305,17 @@ export class Backend implements backendInterface {
             return result;
         }
     }
-    async editMessage(arg0: string, arg1: bigint, arg2: string, arg3: string, arg4: ExternalBlob | null, arg5: ExternalBlob | null): Promise<boolean> {
+    async editMessage(arg0: string, arg1: bigint, arg2: string, arg3: string, arg4: ExternalBlob | null, arg5: ExternalBlob | null, arg6: ExternalBlob | null): Promise<boolean> {
         if (this.processError) {
             try {
-                const result = await this.actor.editMessage(arg0, arg1, arg2, arg3, await to_candid_opt_n10(this._uploadFile, this._downloadFile, arg4), await to_candid_opt_n10(this._uploadFile, this._downloadFile, arg5));
+                const result = await this.actor.editMessage(arg0, arg1, arg2, arg3, await to_candid_opt_n10(this._uploadFile, this._downloadFile, arg4), await to_candid_opt_n10(this._uploadFile, this._downloadFile, arg5), await to_candid_opt_n10(this._uploadFile, this._downloadFile, arg6));
                 return result;
             } catch (e) {
                 this.processError(e);
                 throw new Error("unreachable");
             }
         } else {
-            const result = await this.actor.editMessage(arg0, arg1, arg2, arg3, await to_candid_opt_n10(this._uploadFile, this._downloadFile, arg4), await to_candid_opt_n10(this._uploadFile, this._downloadFile, arg5));
+            const result = await this.actor.editMessage(arg0, arg1, arg2, arg3, await to_candid_opt_n10(this._uploadFile, this._downloadFile, arg4), await to_candid_opt_n10(this._uploadFile, this._downloadFile, arg5), await to_candid_opt_n10(this._uploadFile, this._downloadFile, arg6));
             return result;
         }
     }
@@ -430,17 +431,17 @@ export class Backend implements backendInterface {
             return result;
         }
     }
-    async sendMessage(arg0: string, arg1: string, arg2: string, arg3: string, arg4: bigint | null, arg5: ExternalBlob | null, arg6: ExternalBlob | null): Promise<bigint> {
+    async sendMessage(arg0: string, arg1: string, arg2: string, arg3: string, arg4: bigint | null, arg5: ExternalBlob | null, arg6: ExternalBlob | null, arg7: ExternalBlob | null): Promise<bigint> {
         if (this.processError) {
             try {
-                const result = await this.actor.sendMessage(arg0, arg1, arg2, arg3, to_candid_opt_n20(this._uploadFile, this._downloadFile, arg4), await to_candid_opt_n10(this._uploadFile, this._downloadFile, arg5), await to_candid_opt_n10(this._uploadFile, this._downloadFile, arg6));
+                const result = await this.actor.sendMessage(arg0, arg1, arg2, arg3, to_candid_opt_n20(this._uploadFile, this._downloadFile, arg4), await to_candid_opt_n10(this._uploadFile, this._downloadFile, arg5), await to_candid_opt_n10(this._uploadFile, this._downloadFile, arg6), await to_candid_opt_n10(this._uploadFile, this._downloadFile, arg7));
                 return result;
             } catch (e) {
                 this.processError(e);
                 throw new Error("unreachable");
             }
         } else {
-            const result = await this.actor.sendMessage(arg0, arg1, arg2, arg3, to_candid_opt_n20(this._uploadFile, this._downloadFile, arg4), await to_candid_opt_n10(this._uploadFile, this._downloadFile, arg5), await to_candid_opt_n10(this._uploadFile, this._downloadFile, arg6));
+            const result = await this.actor.sendMessage(arg0, arg1, arg2, arg3, to_candid_opt_n20(this._uploadFile, this._downloadFile, arg4), await to_candid_opt_n10(this._uploadFile, this._downloadFile, arg5), await to_candid_opt_n10(this._uploadFile, this._downloadFile, arg6), await to_candid_opt_n10(this._uploadFile, this._downloadFile, arg7));
             return result;
         }
     }
@@ -478,6 +479,7 @@ async function from_candid_record_n17(_uploadFile: (file: ExternalBlob) => Promi
     isEdited: boolean;
     timestamp: _Time;
     replyToId: [] | [bigint];
+    videoUrl: [] | [_ExternalBlob];
     reactions: Array<_Reaction>;
 }): Promise<{
     id: bigint;
@@ -488,6 +490,7 @@ async function from_candid_record_n17(_uploadFile: (file: ExternalBlob) => Promi
     isEdited: boolean;
     timestamp: Time;
     replyToId?: bigint;
+    videoUrl?: ExternalBlob;
     reactions: Array<Reaction>;
 }> {
     return {
@@ -499,6 +502,7 @@ async function from_candid_record_n17(_uploadFile: (file: ExternalBlob) => Promi
         isEdited: value.isEdited,
         timestamp: value.timestamp,
         replyToId: record_opt_to_undefined(from_candid_opt_n7(_uploadFile, _downloadFile, value.replyToId)),
+        videoUrl: record_opt_to_undefined(await from_candid_opt_n18(_uploadFile, _downloadFile, value.videoUrl)),
         reactions: value.reactions
     };
 }

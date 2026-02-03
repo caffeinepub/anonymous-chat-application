@@ -1,0 +1,69 @@
+{
+  "kind": "implementation_plan",
+  "version": "1.0",
+  "title": "Clickable reply preview jump-to-original (instant) for all message types",
+  "requirements": [
+    {
+      "id": "REQ-1",
+      "summary": "Make each message reply/quotation preview clickable to instantly jump (no smooth scroll) to the original replied-to message for all message types that use replyToId.",
+      "acceptanceCriteria": [
+        "Given a message A and a reply message B that references A via replyToId, clicking the reply preview shown in message B jumps immediately to message A in the scrollable chat message list.",
+        "The jump behavior works for replies to text messages and media messages (image/audio/video).",
+        "The jump uses an instant scroll/jump (not smooth scrolling)."
+      ],
+      "file_operations": [
+        {
+          "path": "frontend/src/components/MessageBubble.tsx",
+          "operation": "modify",
+          "description": "Update the reply preview UI to be consistently rendered when message.replyToId is present and make it clickable (button/interactive container) to invoke a passed-in jump handler; ensure the click target exists for replies to text/image/audio/video messages and does not interfere with existing message actions."
+        },
+        {
+          "path": "frontend/src/components/ChatRoom.tsx",
+          "operation": "modify",
+          "description": "Wire a new callback prop into MessageBubble (e.g., onJumpToMessage) and implement an instant jump behavior that scrolls the chat list to the target message anchor without smooth scrolling."
+        }
+      ]
+    },
+    {
+      "id": "REQ-2",
+      "summary": "If the replied-to message is not in the loaded list, refetch messages once and retry the jump; if still missing, show an English user notice and avoid crashes.",
+      "acceptanceCriteria": [
+        "If a user clicks a reply preview and the referenced message is not found in the current rendered message list, the app refetches messages once and retries locating the message.",
+        "If the message is still not found after the refetch, the UI shows an English message (e.g., toast) such as \"Original message unavailable\" and no navigation occurs.",
+        "No uncaught exceptions occur when clicking reply previews whose originals are missing."
+      ],
+      "file_operations": [
+        {
+          "path": "frontend/src/components/ChatRoom.tsx",
+          "operation": "modify",
+          "description": "Enhance the reply-preview click handler to: (1) attempt to locate the target message anchor in the DOM; (2) if not found, call the existing messages refetch once and retry; (3) if still not found, show a user-facing English notice via the existing toast system (e.g., \"Original message unavailable\") and exit safely without throwing."
+        },
+        {
+          "path": "frontend/src/components/MessageBubble.tsx",
+          "operation": "modify",
+          "description": "Ensure reply previews remain clickable even when the replied-to message is not currently found in allMessages (so the click can trigger the refetch-and-retry flow); display a minimal fallback preview state for missing originals while still using the same click behavior."
+        }
+      ]
+    },
+    {
+      "id": "REQ-3",
+      "summary": "Add stable per-message DOM anchors in the scrollable chat list, keyed by backend message id (and best-effort for optimistic messages), without breaking existing interactions.",
+      "acceptanceCriteria": [
+        "Each non-optimistic message renders with a stable anchor keyed by its backend message id that can be found and scrolled to reliably.",
+        "Existing message interactions (reply/edit/delete/react, image/video/audio render and playback) continue to work as before."
+      ],
+      "file_operations": [
+        {
+          "path": "frontend/src/components/MessageBubble.tsx",
+          "operation": "modify",
+          "description": "Add a stable DOM anchor per message (e.g., an id/data attribute derived from message.id) on the outer message container so it can be targeted reliably for jump-to-message behavior; preserve existing layout, hover actions, reaction UI, and media playback behavior."
+        },
+        {
+          "path": "frontend/src/components/ChatRoom.tsx",
+          "operation": "modify",
+          "description": "Standardize the anchor lookup used by jump-to-message to match the MessageBubble anchor convention (based on backend message id for non-optimistic messages, best-effort for optimistic), ensuring the jump targets the correct message element inside the scrollable chat list."
+        }
+      ]
+    }
+  ]
+}

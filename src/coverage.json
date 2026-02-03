@@ -1,0 +1,75 @@
+{
+  "kind": "coverage_report",
+  "version": "1.0",
+  "generatedAt": "2026-02-03T12:44:57.919Z",
+  "sources": {
+    "buildRequest": true,
+    "implementationPlan": true
+  },
+  "requirements": {
+    "total": 3,
+    "implemented": 3,
+    "items": [
+      {
+        "id": "REQ-1",
+        "summary": "Make the reply/quotation preview in each message clickable so that clicking it instantly jumps (no smooth scroll) to the original message being replied to. Apply this behavior to all replies (text, image, audio, video, and any other message type that supports replyToId).",
+        "status": "implemented",
+        "plannedFiles": [
+          "frontend/src/components/MessageBubble.tsx",
+          "frontend/src/components/ChatRoom.tsx"
+        ],
+        "matchedFiles": [
+          "frontend/src/components/MessageBubble.tsx",
+          "frontend/src/components/ChatRoom.tsx"
+        ]
+      },
+      {
+        "id": "REQ-2",
+        "summary": "If the original replied-to message is not currently available in the loaded message list, attempt to load it by refetching messages for the room and then retry the jump. If the original message is still unavailable (e.g., expired due to TTL, deleted, or otherwise missing), show a user-facing notice in English indicating the original message is unavailable and do not crash.",
+        "status": "implemented",
+        "plannedFiles": [
+          "frontend/src/components/ChatRoom.tsx",
+          "frontend/src/components/MessageBubble.tsx"
+        ],
+        "matchedFiles": [
+          "frontend/src/components/ChatRoom.tsx",
+          "frontend/src/components/MessageBubble.tsx"
+        ]
+      },
+      {
+        "id": "REQ-3",
+        "summary": "Update the message rendering structure so each message in the scrollable chat list has a stable DOM anchor that can be targeted for jumping by message id (including for optimistic messages where possible), without breaking existing reactions, edit/delete, reply, and media playback behaviors.",
+        "status": "implemented",
+        "plannedFiles": [
+          "frontend/src/components/MessageBubble.tsx",
+          "frontend/src/components/ChatRoom.tsx"
+        ],
+        "matchedFiles": [
+          "frontend/src/components/MessageBubble.tsx",
+          "frontend/src/components/ChatRoom.tsx"
+        ]
+      }
+    ]
+  },
+  "changedFiles": [
+    "build-request.json",
+    "build-template/Dockerfile",
+    "build-template/LICENSE",
+    "build-template/README.md",
+    "build-template/deploy.sh",
+    "build-template/icp.yaml",
+    "build-template/src/backend/canister.yaml",
+    "build-template/src/frontend/canister.yaml",
+    "caffeine.lock.json",
+    "feature_evidence.json",
+    "frontend-file-summaries.txt",
+    "frontend-implementation-plan.json",
+    "frontend/src/components/ChatRoom.tsx",
+    "frontend/src/components/MessageBubble.tsx",
+    "frontend/src/hooks/useInternetIdentity.ts",
+    "project_state.json",
+    "scratch/component-selection.json",
+    "spec.md",
+    "spec_vs_diff_report.json"
+  ]
+}

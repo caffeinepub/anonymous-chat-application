@@ -73,6 +73,7 @@ export function useSendMessage() {
       nickname, 
       replyToId,
       image,
+      video,
       audio
     }: { 
       roomId: string; 
@@ -80,6 +81,7 @@ export function useSendMessage() {
       nickname: string; 
       replyToId?: bigint | null;
       image?: ExternalBlob | null;
+      video?: ExternalBlob | null;
       audio?: ExternalBlob | null;
     }) => {
       if (!actor) throw new Error('Actor not initialized. Please wait for the connection to establish.');
@@ -91,7 +93,7 @@ export function useSendMessage() {
       if (!nickname || !nickname.trim()) {
         throw new Error('Nickname is required');
       }
-      if (!content && !image && !audio) {
+      if (!content && !image && !video && !audio) {
         throw new Error('Message content or media is required');
       }
       
@@ -99,17 +101,18 @@ export function useSendMessage() {
       
       const messageId = await actor.sendMessage(
         roomId, 
-        content || (audio ? '🎵 Audio' : '📷 Image'), 
+        content || (video ? '🎬 Video' : audio ? '🎵 Audio' : '📷 Image'), 
         nickname,
         userId,
         replyToId ?? null,
         image ?? null,
+        video ?? null,
         audio ?? null
       );
-      return { messageId, roomId, content, nickname, replyToId, image, audio };
+      return { messageId, roomId, content, nickname, replyToId, image, video, audio };
     },
     // Optimistic update - add message to UI immediately
-    onMutate: async ({ roomId, content, nickname, replyToId, image, audio }) => {
+    onMutate: async ({ roomId, content, nickname, replyToId, image, video, audio }) => {
       // Cancel any outgoing refetches to avoid overwriting optimistic update
       await queryClient.cancelQueries({ queryKey: ['messages', roomId] });
 
@@ -122,11 +125,12 @@ export function useSendMessage() {
       // Create optimistic message - convert null to undefined for TypeScript
       const optimisticMessage: OptimisticMessage = {
         id: BigInt(Date.now()), // Temporary ID
-        content: content || (audio ? '🎵 Audio' : '📷 Image'),
+        content: content || (video ? '🎬 Video' : audio ? '🎵 Audio' : '📷 Image'),
         nickname,
         timestamp: BigInt(Date.now() * 1_000_000), // Convert to nanoseconds
         replyToId: replyToId ?? undefined,
         imageUrl: image ?? undefined,
+        videoUrl: video ?? undefined,
         audioUrl: audio ?? undefined,
         isEdited: false,
         reactions: [],
@@ -259,12 +263,14 @@ export function useEditMessage() {
       messageId, 
       newContent,
       newImage,
+      newVideo,
       newAudio
     }: { 
       roomId: string; 
       messageId: bigint; 
       newContent: string;
       newImage?: ExternalBlob | null;
+      newVideo?: ExternalBlob | null;
       newAudio?: ExternalBlob | null;
     }) => {
       if (!actor) throw new Error('Actor not initialized. Please wait for the connection to establish.');
@@ -275,15 +281,16 @@ export function useEditMessage() {
         userId,
         newContent, 
         newImage ?? null,
+        newVideo ?? null,
         newAudio ?? null
       );
       if (!result) {
         throw new Error('Failed to edit message');
       }
-      return { result, roomId, messageId, newContent, newImage, newAudio };
+      return { result, roomId, messageId, newContent, newImage, newVideo, newAudio };
     },
     // Optimistic update - update message in UI immediately
-    onMutate: async ({ roomId, messageId, newContent, newImage, newAudio }) => {
+    onMutate: async ({ roomId, messageId, newContent, newImage, newVideo, newAudio }) => {
       await queryClient.cancelQueries({ queryKey: ['messages', roomId] });
       
       const previousMessages = queryClient.getQueryData<MessageView[]>(['messages', roomId]);
@@ -298,6 +305,7 @@ export function useEditMessage() {
                 content: newContent, 
                 isEdited: true,
                 imageUrl: newImage ?? msg.imageUrl,
+                videoUrl: newVideo ?? msg.videoUrl,
                 audioUrl: newAudio ?? msg.audioUrl,
               } 
             : msg

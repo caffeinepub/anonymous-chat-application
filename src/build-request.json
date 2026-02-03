@@ -1,0 +1,76 @@
+{
+  "kind": "build_request",
+  "title": "Jump to replied message when clicking the reply quotation preview (all message types)",
+  "priority": "normal",
+  "requirements": [
+    {
+      "id": "REQ-1",
+      "text": "Make the reply/quotation preview in each message clickable so that clicking it instantly jumps (no smooth scroll) to the original message being replied to. Apply this behavior to all replies (text, image, audio, video, and any other message type that supports replyToId).",
+      "target": "frontend",
+      "source": {
+        "messageIds": [
+          "msg-20"
+        ],
+        "quotes": [
+          "when replying to a image, audio or a video, on clicking the quotation i should be redirected to the msg that was replied",
+          "2) instant jump",
+          "3) everything"
+        ]
+      },
+      "acceptanceCriteria": [
+        "Given a message A and a reply message B that references A via replyToId, clicking the reply preview shown in message B jumps immediately to message A in the scrollable chat message list.",
+        "The jump behavior works for replies to text messages and media messages (image/audio/video).",
+        "The jump uses an instant scroll/jump (not smooth scrolling)."
+      ]
+    },
+    {
+      "id": "REQ-2",
+      "text": "If the original replied-to message is not currently available in the loaded message list, attempt to load it by refetching messages for the room and then retry the jump. If the original message is still unavailable (e.g., expired due to TTL, deleted, or otherwise missing), show a user-facing notice in English indicating the original message is unavailable and do not crash.",
+      "target": "frontend",
+      "source": {
+        "messageIds": [
+          "msg-20"
+        ],
+        "quotes": [
+          "1) yes"
+        ]
+      },
+      "acceptanceCriteria": [
+        "If a user clicks a reply preview and the referenced message is not found in the current rendered message list, the app refetches messages once and retries locating the message.",
+        "If the message is still not found after the refetch, the UI shows an English message (e.g., toast) such as \"Original message unavailable\" and no navigation occurs.",
+        "No uncaught exceptions occur when clicking reply previews whose originals are missing."
+      ]
+    },
+    {
+      "id": "REQ-3",
+      "text": "Update the message rendering structure so each message in the scrollable chat list has a stable DOM anchor that can be targeted for jumping by message id (including for optimistic messages where possible), without breaking existing reactions, edit/delete, reply, and media playback behaviors.",
+      "target": "frontend",
+      "source": {
+        "messageIds": [
+          "msg-20"
+        ],
+        "quotes": [
+          "on clicking the quotation i should be redirected to the msg that was replied"
+        ]
+      },
+      "acceptanceCriteria": [
+        "Each non-optimistic message renders with a stable anchor keyed by its backend message id that can be found and scrolled to reliably.",
+        "Existing message interactions (reply/edit/delete/react, image/video/audio render and playback) continue to work as before."
+      ]
+    }
+  ],
+  "constraints": [
+    "Frontend files under frontend.immutablePaths must not be modified (compose existing UI components instead).",
+    "Respect the existing React + TypeScript + Tailwind + React Query stack; do not introduce new frameworks.",
+    "Do not change the backend schema or Motoko canister interfaces for this feature."
+  ],
+  "nonGoals": [
+    "Fixing the separate issue where uploaded videos are not visible to the receiver (not requested in the latest confirmed scope).",
+    "Adding smooth scrolling animations, highlighting effects, or other UX embellishments beyond an instant jump (user requested instant jump).",
+    "Implementing true pagination/history loading beyond a simple refetch of getMessages (no pagination API is currently present)."
+  ],
+  "imageRequirements": {
+    "required": [],
+    "edits": []
+  }
+}

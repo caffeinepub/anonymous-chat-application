@@ -1,0 +1,38 @@
+{
+  "kind": "spec_vs_diff_report",
+  "version": "1.0",
+  "generatedAt": "2026-02-03T12:44:57.879Z",
+  "summary": "REQ-1/2/3 appear implemented via ChatRoom jump-to-message handler (instant jump + refetch-on-miss + toast) and MessageBubble stable DOM anchors + clickable reply preview. However, the diff also includes unrelated/auth changes and added meta files that were not requested.",
+  "missing_requirements": [],
+  "hallucinated_features": [
+    {
+      "description": "Unrelated changes to Internet Identity auth hook (AuthClient/identity provider logic) that are not part of reply-preview jump behavior.",
+      "reason": "BuildRequest scope is limited to clickable reply preview jump/refetch/anchor behavior in the chat message list; no auth/Internet Identity changes were requested.",
+      "evidence": [
+        "frontend/src/hooks/useInternetIdentity.ts"
+      ]
+    },
+    {
+      "description": "Added project metadata/state file.",
+      "reason": "Not requested by BuildRequest requirements; appears to be internal documentation/state.",
+      "evidence": [
+        "project_state.json"
+      ]
+    },
+    {
+      "description": "Added broad repository/file summary document (includes many claimed changes outside scope).",
+      "reason": "Not requested deliverable for the feature; also references changes beyond the provided modified-file list.",
+      "evidence": [
+        "frontend-file-summaries.txt"
+      ]
+    }
+  ],
+  "confidence": 0.72,
+  "changed_files": [
+    "frontend-file-summaries.txt",
+    "frontend/src/components/ChatRoom.tsx",
+    "frontend/src/components/MessageBubble.tsx",
+    "frontend/src/hooks/useInternetIdentity.ts",
+    "project_state.json"
+  ]
+}

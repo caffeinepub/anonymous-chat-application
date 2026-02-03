@@ -1,0 +1,301 @@
+{
+  "schemaVersion": "1.0.0",
+  "projectStateVersion": 5,
+  "summary": "SecureChat is an anonymous, room-code-based real-time chat web app built as a React SPA with an Internet Computer (Motoko) canister backend. Users can create or join chat rooms by code, send text and rich media (images, GIFs/URLs, custom stickers, video uploads, and recorded audio), reply to messages, edit/delete their own messages, and react with emojis. The UI emphasizes “instant” feel via React Query optimistic updates and fast polling, while the backend enforces 24-hour message TTL on reads and stores optional media blobs alongside messages.",
+  "existing_features": [
+    {
+      "id": "IF-1",
+      "title": "Room creation by join code",
+      "synonyms": [
+        "Create room",
+        "New chat room"
+      ],
+      "description": "Users can create a chat room identified by a human-entered join code. Backend createRoom traps if the code already exists; frontend WelcomeScreen validates inputs and calls the createRoom mutation.",
+      "reqIds": [],
+      "version": 1
+    },
+    {
+      "id": "IF-2",
+      "title": "Join room by code (client-side session)",
+      "synonyms": [
+        "Join existing room",
+        "Enter room code"
+      ],
+      "description": "Users join a room by entering a room code and nickname; the frontend transitions into ChatRoom view for that code (without an explicit backend join step).",
+      "reqIds": [],
+      "version": 1
+    },
+    {
+      "id": "IF-3",
+      "title": "Anonymous session user identifier",
+      "synonyms": [
+        "Local userId",
+        "Session ID"
+      ],
+      "description": "Frontend generates a unique userId and stores it in localStorage (chatUserId). This userId is sent to the backend to mark message ownership (edit/delete authorization) and to attribute reactions.",
+      "reqIds": [],
+      "version": 1
+    },
+    {
+      "id": "IF-4",
+      "title": "Message retrieval with real-time polling",
+      "synonyms": [
+        "Fetch messages",
+        "Live updates"
+      ],
+      "description": "Messages for a room are fetched via React Query using actor.getMessages(roomId) with background polling (~1.5s) for a real-time feel and retry/backoff behavior.",
+      "reqIds": [],
+      "version": 1
+    },
+    {
+      "id": "IF-5",
+      "title": "Send messages with optimistic UI updates",
+      "synonyms": [
+        "Optimistic send",
+        "Instant message send"
+      ],
+      "description": "Sending a message uses a React Query mutation that immediately appends an optimistic MessageView to the cache, then invalidates/refetches to reconcile with backend state. Supports optional replyToId and media (image/video/audio).",
+      "reqIds": [],
+      "version": 1
+    },
+    {
+      "id": "IF-6",
+      "title": "Reply-to messages",
+      "synonyms": [
+        "Threaded replies",
+        "Reply preview"
+      ],
+      "description": "Messages can reference a replyToId. UI shows a reply banner while composing and renders an inline replied-to preview in MessageBubble by looking up the referenced message.",
+      "reqIds": [],
+      "version": 1
+    },
+    {
+      "id": "IF-7",
+      "title": "Edit own messages (owner enforced)",
+      "synonyms": [
+        "Message edit",
+        "Update message"
+      ],
+      "description": "Users can edit messages they own (owner=userId set on send). Frontend provides edit mode and performs optimistic cache updates; backend traps if userId does not match owner.",
+      "reqIds": [],
+      "version": 1
+    },
+    {
+      "id": "IF-8",
+      "title": "Delete own messages (owner enforced)",
+      "synonyms": [
+        "Message delete",
+        "Remove message"
+      ],
+      "description": "Users can delete messages they own. Frontend shows a confirmation dialog, optimistically removes the message from cache, and backend enforces ownership via userId.",
+      "reqIds": [],
+      "version": 1
+    },
+    {
+      "id": "IF-9",
+      "title": "Emoji reactions with toggle behavior",
+      "synonyms": [
+        "Reactions",
+        "Like/emoji react"
+      ],
+      "description": "Users can add/remove emoji reactions to messages. Frontend toggles based on whether the current userId already reacted with that emoji, uses optimistic cache updates, and refetches to prevent race conditions. UI groups reactions by emoji with counts and tooltips.",
+      "reqIds": [],
+      "version": 1
+    },
+    {
+      "id": "IF-10",
+      "title": "Emoji picker UI",
+      "synonyms": [
+        "Emoji selector"
+      ],
+      "description": "ChatRoom includes an EmojiPicker popup organized by categories; selecting an emoji appends it to the message input.",
+      "reqIds": [],
+      "version": 1
+    },
+    {
+      "id": "IF-11",
+      "title": "Image upload and paste-to-send",
+      "synonyms": [
+        "Photo upload",
+        "Clipboard image paste"
+      ],
+      "description": "Users can upload images via file input or paste images into the textarea. Files are validated (type/size), converted to ExternalBlob from bytes with upload progress tracking, previewed locally, and sent as message media.",
+      "reqIds": [],
+      "version": 1
+    },
+    {
+      "id": "IF-12",
+      "title": "Video upload and sending",
+      "synonyms": [
+        "Send video",
+        "Video message"
+      ],
+      "description": "VideoUploader allows selecting a video file (type/size validation up to 50MB), preview playback, and sending. ChatRoom converts the selected Blob to ExternalBlob and sends it as a video attachment; MessageBubble renders uploaded videos with native controls.",
+      "reqIds": [],
+      "version": 1
+    },
+    {
+      "id": "IF-13",
+      "title": "Audio recording and sending",
+      "synonyms": [
+        "Voice message",
+        "Record audio"
+      ],
+      "description": "AudioRecorder uses MediaRecorder + getUserMedia to record audio (up to 5 minutes), provides preview playback controls, and sends the recording to ChatRoom which converts it to ExternalBlob and sends as an audio attachment. MessageBubble includes a custom audio player UI with progress/seek and error handling.",
+      "reqIds": [],
+      "version": 1
+    },
+    {
+      "id": "IF-14",
+      "title": "Media picker with GIF search and URL sharing",
+      "synonyms": [
+        "GIF picker",
+        "Attach URL"
+      ],
+      "description": "MediaPicker integrates Tenor API to fetch trending GIFs and search by query, allowing users to insert GIF URLs into messages. It also provides a URL tab for adding arbitrary image/GIF URLs.",
+      "reqIds": [],
+      "version": 1
+    },
+    {
+      "id": "IF-15",
+      "title": "Custom sticker upload with local TTL",
+      "synonyms": [
+        "My Stickers",
+        "Sticker library"
+      ],
+      "description": "Users can upload small images as custom stickers (validated to 2MB), which are stored in localStorage with timestamps and expire after 24 hours. Stickers are reconstructed via ExternalBlob.fromURL and can be inserted into chat as blob URLs.",
+      "reqIds": [],
+      "version": 1
+    },
+    {
+      "id": "IF-16",
+      "title": "Embedded media URL detection in message text",
+      "synonyms": [
+        "Auto-render image links",
+        "Inline media"
+      ],
+      "description": "MessageBubble detects image/GIF URLs (by extension and common providers like Tenor/Giphy/Imgur) in text content and renders them inline as images, while preserving surrounding text with whitespace/newlines.",
+      "reqIds": [],
+      "version": 1
+    },
+    {
+      "id": "IF-17",
+      "title": "Message retention policy (24h TTL)",
+      "synonyms": [
+        "Auto-delete",
+        "Ephemeral messages"
+      ],
+      "description": "Backend defines a 24-hour message TTL and filters expired messages out of getMessages results. Frontend displays the TTL to users and includes a hook returning 24h (nanoseconds) for UI copy.",
+      "reqIds": [],
+      "version": 1
+    },
+    {
+      "id": "IF-18",
+      "title": "Internet Identity integration and access control initialization",
+      "synonyms": [
+        "II login",
+        "Admin token initialization"
+      ],
+      "description": "Frontend provides an InternetIdentityProvider for login/logout and identity persistence. Actor creation uses the authenticated identity when present and calls backend _initializeAccessControlWithSecret with a secret taken from the URL hash (caffeineAdminToken), allowing the first matching caller to become admin; backend exposes role queries and admin-only role assignment.",
+      "reqIds": [],
+      "version": 1
+    },
+    {
+      "id": "IF-19",
+      "title": "Backend user profile storage APIs",
+      "synonyms": [
+        "User profile",
+        "Nickname profile"
+      ],
+      "description": "Backend includes APIs to save and query user profiles keyed by principal text. Non-admins can only read their own profiles; admins can read others.",
+      "reqIds": [],
+      "version": 1
+    },
+    {
+      "id": "IF-20",
+      "title": "Blob storage maintenance endpoints (gateway auth, dead-blob pruning, cashier refill)",
+      "synonyms": [
+        "Storage mixin",
+        "Blob GC support"
+      ],
+      "description": "Backend includes blob-storage mixin endpoints to update authorized gateway principals, list dead blobs to delete (authorized callers only), confirm deletion (and trigger GC), check blob liveness, and refill a cashier canister with cycles (cashier-only).",
+      "reqIds": [],
+      "version": 1
+    },
+    {
+      "id": "IF-21",
+      "title": "HTTP outcall helper module",
+      "synonyms": [
+        "IC http_request wrapper",
+        "HTTP GET/POST outcalls"
+      ],
+      "description": "Backend provides a utility module for making replicated=false IC http_request GET/POST calls with cycle budgeting, optional transform, and UTF-8 decoding with trapping on empty responses.",
+      "reqIds": [],
+      "version": 1
+    },
+    {
+      "id": "feature-make-the-reply-quotation-preview-in-each-message-clickable-so-that-clicking-it-instantly-jumps-no-smooth-scroll-to-the-original-message-being-replied-to-apply-this-behavior-to-all-replies-text-image-audio-video-and-any-other-message-type-that-supports-replytoid",
+      "title": "Make the reply/quotation preview in each message clickable so that clicking it instantly jumps (no smooth scroll) to the original message being replied to. Apply this behavior to all replies (text, image, audio, video, and any other message type that supports replyToId).",
+      "reqIds": [
+        "REQ-1"
+      ],
+      "version": 1
+    },
+    {
+      "id": "feature-if-the-original-replied-to-message-is-not-currently-available-in-the-loaded-message-list-attempt-to-load-it-by-refetching-messages-for-the-room-and-then-retry-the-jump-if-the-original-message-is-still-unavailable-e-g-expired-due-to-ttl-deleted-or-otherwise-missing-show-a-user-facing-notice-in-english-indicating-the-original-message-is-unavailable-and-do-not-crash",
+      "title": "If the original replied-to message is not currently available in the loaded message list, attempt to load it by refetching messages for the room and then retry the jump. If the original message is still unavailable (e.g., expired due to TTL, deleted, or otherwise missing), show a user-facing notice in English indicating the original message is unavailable and do not crash.",
+      "reqIds": [
+        "REQ-2"
+      ],
+      "version": 1
+    },
+    {
+      "id": "feature-update-the-message-rendering-structure-so-each-message-in-the-scrollable-chat-list-has-a-stable-dom-anchor-that-can-be-targeted-for-jumping-by-message-id-including-for-optimistic-messages-where-possible-without-breaking-existing-reactions-edit-delete-reply-and-media-playback-behaviors",
+      "title": "Update the message rendering structure so each message in the scrollable chat list has a stable DOM anchor that can be targeted for jumping by message id (including for optimistic messages where possible), without breaking existing reactions, edit/delete, reply, and media playback behaviors.",
+      "reqIds": [
+        "REQ-3"
+      ],
+      "version": 1
+    }
+  ],
+  "new_feature_requests": [
+    {
+      "id": "AR-1",
+      "summary": "When tapping the quoted/replied-to preview (especially for image/audio/video replies), scroll/jump to the original message that was replied to",
+      "reqIds": [],
+      "status": "pending"
+    }
+  ],
+  "architecturalNotes": [
+    "Frontend is a React + TypeScript SPA using TanStack React Query for data fetching/mutations with cache invalidation, optimistic updates, and rollback handling.",
+    "UI is composed of small components (WelcomeScreen, ChatRoom, MessageBubble, MediaPicker, EmojiPicker, AudioRecorder, VideoUploader) and styled with TailwindCSS (OKLCH theme) plus shadcn/ui primitives.",
+    "Near-real-time updates are implemented via client-side polling (refetch interval ~1.5s) rather than websocket/push.",
+    "Session-level identity for message ownership and reactions is a random userId stored in localStorage (separate from Internet Identity).",
+    "Backend is a Motoko canister using mo:core Map/List structures to store rooms and per-room message lists; message IDs are generated incrementally.",
+    "Backend uses mixins for cross-cutting concerns: blob-storage management endpoints (gateway authorization, dead-blob pruning hooks) and authorization/access-control endpoints (admin/user/guest roles).",
+    "Internet Identity integration exists primarily to initialize/assign roles (admin vs user) via an admin token passed from a URL hash secret; chat operations themselves are anonymous and not gated by II.",
+    "A migration module is included to evolve message schema (adding videoUrl field) using a `with migration = Migration.run` actor pattern.",
+    "Media attachments are represented in the frontend via an ExternalBlob abstraction that can be created from bytes or URL and can report upload progress; MessageBubble renders uploaded media using ExternalBlob.getDirectURL().",
+    "Media/GIF discovery uses direct browser fetch calls to Tenor’s API from the client; custom stickers are persisted in localStorage with a TTL aligned to message retention.",
+    "Mobile UX is specifically addressed (safe-area padding, dvh-based height, preventing iOS zoom, preventing body scroll in chat mode).",
+    "Reply-preview click behavior: apply to all replies (including text). On click, instantly jump to the original message; if the original is outside the currently loaded range, load older messages and then jump. If the original has expired due to TTL, show an 'Original message unavailable' notice (implied edge case handling)."
+  ],
+  "knownIssues": [
+    "Room existence check is unreliable: backend getMessages(roomId) returns [] for unknown roomIds (does not validate that the room exists), so frontend useRoomExists (which calls getMessages) will typically report that a room exists even when it doesn’t; sendMessage will later trap with “Room does not exist”.",
+    "Message TTL is only applied as a filter on read (getMessages); expired messages are not pruned from storage, so memory can grow unbounded over time.",
+    "Frontend useMessageTTL is hardcoded to 24h and does not call the backend getMessageTTL query, risking configuration drift.",
+    "createRoom mutation invalidates a ['rooms'] query key, but no corresponding rooms list query is present in the provided code (likely dead/unused invalidation).",
+    "Tenor API key is hardcoded in the client (publicly exposed) and could be rate-limited/abused; there is no server-side proxying or key protection.",
+    "Environment variable name in blob storage cashier principal lookup appears misspelled: CAFFFEINE_STORAGE_CASHIER_PRINCIPAL (triple 'F'), which may cause runtime traps if operators set CAFFEINE_… instead.",
+    "Backend access-control initialization traps if CAFFEINE_ADMIN_TOKEN env var is not set; authenticated flows that call _initializeAccessControlWithSecret will fail hard in that environment.",
+    "Frontend reference indicates a VideoRecorder component exists, but the provided frontend/src/components/VideoRecorder.tsx file is empty (build/runtime issues likely if imported elsewhere)."
+  ],
+  "isFixRequest": false,
+  "generatedImages": [],
+  "gameProjectType": "none",
+  "projectName": "SecureChat",
+  "clarification_mode": "instant",
+  "clarification_rounds": 0,
+  "requiresBackendChanges": false,
+  "requiresFrontendChanges": true
+}

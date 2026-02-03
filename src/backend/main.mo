@@ -11,6 +11,8 @@ import MixinAuthorization "authorization/MixinAuthorization";
 import AccessControl "authorization/access-control";
 import Array "mo:core/Array";
 
+
+
 actor {
   let accessControlState = AccessControl.initState();
   include MixinStorage();
@@ -28,6 +30,7 @@ actor {
     nickname : Text;
     replyToId : ?Nat;
     imageUrl : ?Storage.ExternalBlob;
+    videoUrl : ?Storage.ExternalBlob;
     audioUrl : ?Storage.ExternalBlob;
     isEdited : Bool;
     reactions : List.List<Reaction>;
@@ -41,6 +44,7 @@ actor {
     nickname : Text;
     replyToId : ?Nat;
     imageUrl : ?Storage.ExternalBlob;
+    videoUrl : ?Storage.ExternalBlob;
     audioUrl : ?Storage.ExternalBlob;
     isEdited : Bool;
     reactions : [Reaction];
@@ -107,6 +111,7 @@ actor {
       nickname = message.nickname;
       replyToId = message.replyToId;
       imageUrl = message.imageUrl;
+      videoUrl = message.videoUrl;
       audioUrl = message.audioUrl;
       isEdited = message.isEdited;
       reactions = message.reactions.toArray();
@@ -133,6 +138,7 @@ actor {
     userId : Text,
     replyToId : ?Nat,
     image : ?Storage.ExternalBlob,
+    video : ?Storage.ExternalBlob,
     audio : ?Storage.ExternalBlob,
   ) : async Nat {
     if (chatRooms.get(roomId) == null) {
@@ -148,6 +154,7 @@ actor {
       nickname;
       replyToId;
       imageUrl = image;
+      videoUrl = video;
       audioUrl = audio;
       isEdited = false;
       reactions = List.empty<Reaction>();
@@ -168,6 +175,7 @@ actor {
     userId : Text,
     newContent : Text,
     newImage : ?Storage.ExternalBlob,
+    newVideo : ?Storage.ExternalBlob,
     newAudio : ?Storage.ExternalBlob,
   ) : async Bool {
     switch (messages.get(roomId)) {
@@ -188,6 +196,7 @@ actor {
                     content = newContent;
                     isEdited = true;
                     imageUrl = newImage;
+                    videoUrl = newVideo;
                     audioUrl = newAudio;
                   };
                 } else {

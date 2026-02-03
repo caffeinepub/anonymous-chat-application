@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Send, Smile, Image as ImageIcon, X, Upload, AlertCircle, Mic } from 'lucide-react';
+import { Send, Smile, Image as ImageIcon, X, Upload, AlertCircle, Mic, Video } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -30,6 +30,7 @@ import MessageBubble from './MessageBubble';
 import EmojiPicker from './EmojiPicker';
 import MediaPicker from './MediaPicker';
 import AudioRecorder from './AudioRecorder';
+import VideoUploader from './VideoUploader';
 import type { MessageView } from '../backend';
 import { ExternalBlob } from '../backend';
 
@@ -45,13 +46,16 @@ export default function ChatRoom({ roomId, nickname }: ChatRoomProps) {
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [showMediaPicker, setShowMediaPicker] = useState(false);
   const [showAudioRecorder, setShowAudioRecorder] = useState(false);
+  const [showVideoUploader, setShowVideoUploader] = useState(false);
   const [sendError, setSendError] = useState<string | null>(null);
   const [replyingTo, setReplyingTo] = useState<MessageView | null>(null);
   const [editingMessage, setEditingMessage] = useState<MessageView | null>(null);
   const [messageToDelete, setMessageToDelete] = useState<MessageView | null>(null);
   const [selectedImage, setSelectedImage] = useState<ExternalBlob | null>(null);
+  const [selectedVideo, setSelectedVideo] = useState<ExternalBlob | null>(null);
   const [selectedAudio, setSelectedAudio] = useState<ExternalBlob | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [videoPreview, setVideoPreview] = useState<string | null>(null);
   const [uploadProgress, setUploadProgress] = useState<number>(0);
   const scrollViewportRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -100,6 +104,37 @@ export default function ChatRoom({ roomId, nickname }: ChatRoomProps) {
   const scrollToBottom = (behavior: ScrollBehavior = 'smooth') => {
     if (messagesEndRef.current && !isUserScrollingRef.current) {
       messagesEndRef.current.scrollIntoView({ behavior, block: 'end' });
+    }
+  };
+
+  // Jump to message handler with refetch-and-retry logic
+  const handleJumpToMessage = async (messageId: bigint) => {
+    const targetElement = document.getElementById(`message-${messageId}`);
+    
+    if (targetElement) {
+      // Message found - instant jump
+      targetElement.scrollIntoView({ behavior: 'auto', block: 'center' });
+      return;
+    }
+
+    // Message not found - refetch and retry
+    try {
+      await refetch();
+      
+      // Wait a bit for DOM to update
+      setTimeout(() => {
+        const retryElement = document.getElementById(`message-${messageId}`);
+        
+        if (retryElement) {
+          retryElement.scrollIntoView({ behavior: 'auto', block: 'center' });
+        } else {
+          // Still not found after refetch
+          toast.error('Original message unavailable');
+        }
+      }, 100);
+    } catch (error) {
+      console.error('Failed to refetch messages:', error);
+      toast.error('Original message unavailable');
     }
   };
 
@@ -273,6 +308,51 @@ export default function ChatRoom({ roomId, nickname }: ChatRoomProps) {
     setUploadProgress(0);
   };
 
+  const handleRemoveVideo = () => {
+    setSelectedVideo(null);
+    if (videoPreview) {
+      URL.revokeObjectURL(videoPreview);
+      setVideoPreview(null);
+    }
+    setUploadProgress(0);
+  };
+
+  const handleVideoSend = async (videoBlob: Blob) => {
+    try {
+      console.log('Processing video blob:', videoBlob.size, 'bytes, type:', videoBlob.type);
+      
+      const arrayBuffer = await videoBlob.arrayBuffer();
+      const uint8Array = new Uint8Array(arrayBuffer);
+      const blob = ExternalBlob.fromBytes(uint8Array).withUploadProgress((percentage) => {
+        setUploadProgress(percentage);
+      });
+      
+      setSelectedVideo(blob);
+      setShowVideoUploader(false);
+      
+      // Auto-send video message with optimistic update
+      await sendMessage.mutateAsync({ 
+        roomId, 
+        content: '🎬 Video message', 
+        nickname,
+        video: blob
+      });
+      
+      setSelectedVideo(null);
+      setUploadProgress(0);
+      toast.success('Video message sent!');
+      
+      // Faster scroll after send
+      setTimeout(() => {
+        isUserScrollingRef.current = false;
+        scrollToBottom('smooth');
+      }, 50);
+    } catch (error) {
+      console.error('Error sending video:', error);
+      toast.error('Failed to send video message');
+    }
+  };
+
   const handleAudioSend = async (audioBlob: Blob) => {
     try {
       console.log('Processing audio blob:', audioBlob.size, 'bytes, type:', audioBlob.type);
@@ -311,7 +391,7 @@ export default function ChatRoom({ roomId, nickname }: ChatRoomProps) {
 
   const handleSendMessage = async () => {
     const trimmedMessage = message.trim();
-    if (!trimmedMessage && !selectedImage) return;
+    if (!trimmedMessage && !selectedImage && !selectedVideo) return;
 
     if (!actor) {
       toast.error('Connection not ready. Please wait a moment and try again.');
@@ -325,10 +405,12 @@ export default function ChatRoom({ roomId, nickname }: ChatRoomProps) {
 
     const messageToSend = message; // Keep original formatting with newlines
     const imageToSend = selectedImage;
+    const videoToSend = selectedVideo;
     
     // Clear input immediately for instant feedback
     setMessage('');
     handleRemoveImage();
+    handleRemoveVideo();
     setShowEmojiPicker(false);
     setShowMediaPicker(false);
     setSendError(null);
@@ -341,7 +423,8 @@ export default function ChatRoom({ roomId, nickname }: ChatRoomProps) {
           roomId, 
           messageId: editingMessage.id, 
           newContent: messageToSend,
-          newImage: imageToSend
+          newImage: imageToSend,
+          newVideo: videoToSend
         });
         setEditingMessage(null);
         toast.success('Message edited');
@@ -349,10 +432,11 @@ export default function ChatRoom({ roomId, nickname }: ChatRoomProps) {
         // Send with optimistic update - message appears instantly
         await sendMessage.mutateAsync({ 
           roomId, 
-          content: messageToSend || '📷 Image', 
+          content: messageToSend || (videoToSend ? '🎬 Video' : '📷 Image'), 
           nickname,
           replyToId: replyingTo?.id ?? null,
-          image: imageToSend
+          image: imageToSend,
+          video: videoToSend
         });
         setReplyingTo(null);
       }
@@ -367,6 +451,9 @@ export default function ChatRoom({ roomId, nickname }: ChatRoomProps) {
       setMessage(messageToSend);
       if (imageToSend) {
         setSelectedImage(imageToSend);
+      }
+      if (videoToSend) {
+        setSelectedVideo(videoToSend);
       }
       const errorMessage = error instanceof Error ? error.message : editingMessage ? 'Failed to edit message' : 'Failed to send message';
       setSendError(errorMessage);
@@ -453,6 +540,7 @@ export default function ChatRoom({ roomId, nickname }: ChatRoomProps) {
     setEditingMessage(null);
     setMessage('');
     handleRemoveImage();
+    handleRemoveVideo();
   };
 
   const handleEmojiSelect = (emoji: string) => {
@@ -585,6 +673,7 @@ export default function ChatRoom({ roomId, nickname }: ChatRoomProps) {
                       onEdit={handleEdit}
                       onDelete={handleDeleteClick}
                       onReaction={handleReaction}
+                      onJumpToMessage={handleJumpToMessage}
                       allMessages={messages}
                     />
                   ))}
@@ -683,6 +772,42 @@ export default function ChatRoom({ roomId, nickname }: ChatRoomProps) {
                 </div>
               </div>
             )}
+
+            {videoPreview && (
+              <div className="mb-2 relative rounded-lg border border-primary/20 p-2 bg-muted/50">
+                <div className="flex items-center gap-2">
+                  <video 
+                    src={videoPreview} 
+                    className="h-20 w-20 object-cover rounded"
+                    muted
+                  />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-semibold">Video ready to send</p>
+                    {uploadProgress > 0 && uploadProgress < 100 && (
+                      <div className="mt-1">
+                        <div className="h-1.5 w-full bg-muted rounded-full overflow-hidden">
+                          <div 
+                            className="h-full bg-primary transition-all duration-300"
+                            style={{ width: `${uploadProgress}%` }}
+                          />
+                        </div>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          Uploading: {uploadProgress}%
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-6 w-6 flex-shrink-0"
+                    onClick={handleRemoveVideo}
+                  >
+                    <X className="h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
+            )}
             
             <div className="flex items-end gap-2">
               <div className="relative flex-1">
@@ -698,7 +823,7 @@ export default function ChatRoom({ roomId, nickname }: ChatRoomProps) {
                       ? "Edit your message... (Enter to send, Shift+Enter for new line)" 
                       : "Type a message... (Enter to send, Shift+Enter for new line)"
                   }
-                  className="pr-32 min-h-[40px] max-h-[200px] resize-none"
+                  className="pr-40 min-h-[40px] max-h-[200px] resize-none"
                   rows={1}
                   disabled={sendMessage.isPending || editMessage.isPending || !actor}
                 />
@@ -727,7 +852,24 @@ export default function ChatRoom({ roomId, nickname }: ChatRoomProps) {
                     size="icon"
                     className="h-8 w-8"
                     onClick={() => {
+                      setShowVideoUploader(!showVideoUploader);
+                      setShowAudioRecorder(false);
+                      setShowEmojiPicker(false);
+                      setShowMediaPicker(false);
+                    }}
+                    disabled={sendMessage.isPending || editMessage.isPending || !actor}
+                    title="Upload video"
+                  >
+                    <Video className="h-4 w-4" />
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8"
+                    onClick={() => {
                       setShowAudioRecorder(!showAudioRecorder);
+                      setShowVideoUploader(false);
                       setShowEmojiPicker(false);
                       setShowMediaPicker(false);
                     }}
@@ -745,6 +887,7 @@ export default function ChatRoom({ roomId, nickname }: ChatRoomProps) {
                       setShowEmojiPicker(!showEmojiPicker);
                       setShowMediaPicker(false);
                       setShowAudioRecorder(false);
+                      setShowVideoUploader(false);
                     }}
                     disabled={sendMessage.isPending || editMessage.isPending || !actor}
                   >
@@ -759,6 +902,7 @@ export default function ChatRoom({ roomId, nickname }: ChatRoomProps) {
                       setShowMediaPicker(!showMediaPicker);
                       setShowEmojiPicker(false);
                       setShowAudioRecorder(false);
+                      setShowVideoUploader(false);
                     }}
                     disabled={sendMessage.isPending || editMessage.isPending || !actor}
                   >
@@ -775,6 +919,11 @@ export default function ChatRoom({ roomId, nickname }: ChatRoomProps) {
                     <MediaPicker onSelect={handleMediaSelect} onClose={() => setShowMediaPicker(false)} />
                   </div>
                 )}
+                {showVideoUploader && (
+                  <div className="absolute bottom-full right-0 mb-2 z-50">
+                    <VideoUploader onSend={handleVideoSend} onClose={() => setShowVideoUploader(false)} />
+                  </div>
+                )}
                 {showAudioRecorder && (
                   <div className="absolute bottom-full right-0 mb-2 z-50">
                     <AudioRecorder onSend={handleAudioSend} onClose={() => setShowAudioRecorder(false)} />
@@ -783,7 +932,7 @@ export default function ChatRoom({ roomId, nickname }: ChatRoomProps) {
               </div>
               <Button
                 onClick={handleSendMessage}
-                disabled={(!message.trim() && !selectedImage) || sendMessage.isPending || editMessage.isPending || !actor}
+                disabled={(!message.trim() && !selectedImage && !selectedVideo) || sendMessage.isPending || editMessage.isPending || !actor}
                 size="icon"
                 className="h-10 w-10 flex-shrink-0"
               >

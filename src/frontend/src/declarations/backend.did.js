@@ -37,6 +37,7 @@ export const MessageView = IDL.Record({
   'isEdited' : IDL.Bool,
   'timestamp' : Time,
   'replyToId' : IDL.Opt(IDL.Nat),
+  'videoUrl' : IDL.Opt(ExternalBlob),
   'reactions' : IDL.Vec(Reaction),
 });
 
@@ -84,6 +85,7 @@ export const idlService = IDL.Service({
         IDL.Text,
         IDL.Opt(ExternalBlob),
         IDL.Opt(ExternalBlob),
+        IDL.Opt(ExternalBlob),
       ],
       [IDL.Bool],
       [],
@@ -107,6 +109,7 @@ export const idlService = IDL.Service({
         IDL.Text,
         IDL.Text,
         IDL.Opt(IDL.Nat),
+        IDL.Opt(ExternalBlob),
         IDL.Opt(ExternalBlob),
         IDL.Opt(ExternalBlob),
       ],
@@ -147,6 +150,7 @@ export const idlFactory = ({ IDL }) => {
     'isEdited' : IDL.Bool,
     'timestamp' : Time,
     'replyToId' : IDL.Opt(IDL.Nat),
+    'videoUrl' : IDL.Opt(ExternalBlob),
     'reactions' : IDL.Vec(Reaction),
   });
   
@@ -194,6 +198,7 @@ export const idlFactory = ({ IDL }) => {
           IDL.Text,
           IDL.Opt(ExternalBlob),
           IDL.Opt(ExternalBlob),
+          IDL.Opt(ExternalBlob),
         ],
         [IDL.Bool],
         [],
@@ -217,6 +222,7 @@ export const idlFactory = ({ IDL }) => {
           IDL.Text,
           IDL.Text,
           IDL.Opt(IDL.Nat),
+          IDL.Opt(ExternalBlob),
           IDL.Opt(ExternalBlob),
           IDL.Opt(ExternalBlob),
         ],

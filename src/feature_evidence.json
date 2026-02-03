@@ -1,0 +1,74 @@
+{
+  "kind": "feature_evidence_report",
+  "features": [
+    {
+      "featureId": "feature-make-the-reply-quotation-preview-in-each-message-clickable-so-that-clicking-it-instantly-jumps-no-smooth-scroll-to-the-original-message-being-replied-to-apply-this-behavior-to-all-replies-text-image-audio-video-and-any-other-message-type-that-supports-replytoid",
+      "featureTitle": "Make the reply/quotation preview in each message clickable so that clicking it instantly jumps (no smooth scroll) to the original message being replied to. Apply this behavior to all replies (text, image, audio, video, and any other message type that supports replyToId).",
+      "files": [
+        "frontend/src/components/ChatRoom.tsx",
+        "frontend/src/components/MessageBubble.tsx"
+      ],
+      "components": [
+        "http-outcalls@3.0.0",
+        "blob-storage@4.0.0",
+        "core-infrastructure@1.0.2",
+        "shadcn-ui@1.0.0",
+        "build-template-react@1.0.0",
+        "initial-app@1.0.0",
+        "authorization@4.0.0",
+        "camera@1.0.0",
+        "github-export-icp-cli@1.0.0"
+      ],
+      "testIds": [
+        "REQ-1"
+      ],
+      "confidence": "high"
+    },
+    {
+      "featureId": "feature-if-the-original-replied-to-message-is-not-currently-available-in-the-loaded-message-list-attempt-to-load-it-by-refetching-messages-for-the-room-and-then-retry-the-jump-if-the-original-message-is-still-unavailable-e-g-expired-due-to-ttl-deleted-or-otherwise-missing-show-a-user-facing-notice-in-english-indicating-the-original-message-is-unavailable-and-do-not-crash",
+      "featureTitle": "If the original replied-to message is not currently available in the loaded message list, attempt to load it by refetching messages for the room and then retry the jump. If the original message is still unavailable (e.g., expired due to TTL, deleted, or otherwise missing), show a user-facing notice in English indicating the original message is unavailable and do not crash.",
+      "files": [
+        "frontend/src/components/ChatRoom.tsx",
+        "frontend/src/components/MessageBubble.tsx"
+      ],
+      "components": [
+        "http-outcalls@3.0.0",
+        "blob-storage@4.0.0",
+        "core-infrastructure@1.0.2",
+        "shadcn-ui@1.0.0",
+        "build-template-react@1.0.0",
+        "initial-app@1.0.0",
+        "authorization@4.0.0",
+        "camera@1.0.0",
+        "github-export-icp-cli@1.0.0"
+      ],
+      "testIds": [
+        "REQ-2"
+      ],
+      "confidence": "high"
+    },
+    {
+      "featureId": "feature-update-the-message-rendering-structure-so-each-message-in-the-scrollable-chat-list-has-a-stable-dom-anchor-that-can-be-targeted-for-jumping-by-message-id-including-for-optimistic-messages-where-possible-without-breaking-existing-reactions-edit-delete-reply-and-media-playback-behaviors",
+      "featureTitle": "Update the message rendering structure so each message in the scrollable chat list has a stable DOM anchor that can be targeted for jumping by message id (including for optimistic messages where possible), without breaking existing reactions, edit/delete, reply, and media playback behaviors.",
+      "files": [
+        "frontend/src/components/ChatRoom.tsx",
+        "frontend/src/components/MessageBubble.tsx"
+      ],
+      "components": [
+        "http-outcalls@3.0.0",
+        "blob-storage@4.0.0",
+        "core-infrastructure@1.0.2",
+        "shadcn-ui@1.0.0",
+        "build-template-react@1.0.0",
+        "initial-app@1.0.0",
+        "authorization@4.0.0",
+        "camera@1.0.0",
+        "github-export-icp-cli@1.0.0"
+      ],
+      "testIds": [
+        "REQ-3"
+      ],
+      "confidence": "high"
+    }
+  ]
+}

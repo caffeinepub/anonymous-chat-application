@@ -15,6 +15,7 @@ interface MessageBubbleProps {
   onEdit: (message: MessageView) => void;
   onDelete: (message: MessageView) => void;
   onReaction: (messageId: bigint, emoji: string) => void;
+  onJumpToMessage?: (messageId: bigint) => void;
   allMessages: MessageView[];
 }
 
@@ -28,11 +29,13 @@ export default function MessageBubble({
   onEdit, 
   onDelete, 
   onReaction,
+  onJumpToMessage,
   allMessages 
 }: MessageBubbleProps) {
   const timestamp = new Date(Number(message.timestamp) / 1_000_000);
   const timeAgo = formatDistanceToNow(timestamp, { addSuffix: true });
   const [imageError, setImageError] = useState(false);
+  const [videoError, setVideoError] = useState(false);
   const [showReactionPicker, setShowReactionPicker] = useState(false);
   const [isPlayingAudio, setIsPlayingAudio] = useState(false);
   const [audioProgress, setAudioProgress] = useState(0);
@@ -84,6 +87,13 @@ export default function MessageBubble({
   const handleReactionClick = (emoji: string) => {
     onReaction(message.id, emoji);
     setShowReactionPicker(false);
+  };
+
+  // Handle reply preview click
+  const handleReplyPreviewClick = () => {
+    if (message.replyToId && onJumpToMessage) {
+      onJumpToMessage(message.replyToId);
+    }
   };
 
   // Audio playback controls with enhanced error handling
@@ -233,6 +243,7 @@ export default function MessageBubble({
 
   // Check if message has uploaded media
   const hasUploadedImage = message.imageUrl !== undefined && message.imageUrl !== null;
+  const hasUploadedVideo = message.videoUrl !== undefined && message.videoUrl !== null;
   const hasUploadedAudio = message.audioUrl !== undefined && message.audioUrl !== null;
 
   // Split content into text and media parts
@@ -269,6 +280,42 @@ export default function MessageBubble({
       } catch (error) {
         console.error('Error getting image URL:', error);
         setImageError(true);
+      }
+    }
+
+    // Render uploaded video if present
+    if (hasUploadedVideo && message.videoUrl) {
+      try {
+        const videoUrl = message.videoUrl.getDirectURL();
+        parts.push(
+          <div key="uploaded-video" className="relative">
+            <video
+              src={videoUrl}
+              controls
+              className="rounded-md max-w-full max-h-96 w-auto h-auto"
+              preload="metadata"
+              playsInline
+              onError={(e) => {
+                console.error('Video load error:', e);
+                setVideoError(true);
+              }}
+              onLoadedMetadata={() => setVideoError(false)}
+            >
+              Your browser does not support the video tag.
+            </video>
+            {videoError && (
+              <div className="absolute inset-0 flex items-center justify-center bg-muted/80 rounded-md">
+                <div className="text-center p-2">
+                  <AlertCircle className="h-6 w-6 mx-auto mb-1 text-muted-foreground" />
+                  <p className="text-xs text-muted-foreground">Video failed to load</p>
+                </div>
+              </div>
+            )}
+          </div>
+        );
+      } catch (error) {
+        console.error('Error getting video URL:', error);
+        setVideoError(true);
       }
     }
 
@@ -338,7 +385,7 @@ export default function MessageBubble({
 
     // Render text and embedded media
     if (!hasMedia) {
-      if (message.content && !message.content.match(/^(🎵 Audio|📷 Image)( message)?$/)) {
+      if (message.content && !message.content.match(/^(🎬 Video|🎵 Audio|📷 Image)( message)?$/)) {
         parts.push(
           <p key="text-content" className="text-sm whitespace-pre-wrap break-words">
             {message.content}
@@ -402,7 +449,11 @@ export default function MessageBubble({
   };
 
   return (
-    <div className="flex gap-3 animate-in fade-in slide-in-from-bottom-2 duration-300 group">
+    <div 
+      id={`message-${message.id}`}
+      data-message-id={message.id.toString()}
+      className="flex gap-3 animate-in fade-in slide-in-from-bottom-2 duration-300 group"
+    >
       <Avatar className="h-10 w-10 border-2 border-primary/20">
         <AvatarImage src="/assets/generated/anonymous-avatar-transparent.dim_100x100.png" />
         <AvatarFallback>{getInitials(message.nickname)}</AvatarFallback>
@@ -418,16 +469,19 @@ export default function MessageBubble({
           )}
         </div>
         <div className="rounded-lg bg-muted/50 p-3 max-w-2xl">
-          {/* Reply Preview */}
-          {repliedToMessage && (
-            <div className="mb-2 pl-2 border-l-2 border-primary/40 bg-background/50 rounded p-2">
+          {/* Reply Preview - Clickable */}
+          {message.replyToId && (
+            <button
+              onClick={handleReplyPreviewClick}
+              className="mb-2 pl-2 border-l-2 border-primary/40 bg-background/50 rounded p-2 w-full text-left hover:bg-background/70 transition-colors cursor-pointer"
+            >
               <p className="text-xs font-semibold text-primary">
-                Replying to {repliedToMessage.nickname}
+                Replying to {repliedToMessage?.nickname || 'Unknown'}
               </p>
               <p className="text-xs text-muted-foreground">
-                {getMessagePreview(repliedToMessage.content)}
+                {repliedToMessage ? getMessagePreview(repliedToMessage.content) : 'Message not available'}
               </p>
-            </div>
+            </button>
           )}
           
           <div className="space-y-2">
@@ -529,4 +583,3 @@ export default function MessageBubble({
     </div>
   );
 }
-
