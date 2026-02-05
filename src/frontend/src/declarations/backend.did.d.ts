@@ -79,7 +79,9 @@ export interface _SERVICE {
   'getMessages' : ActorMethod<[string], Array<MessageView>>,
   'getUserProfile' : ActorMethod<[string], [] | [UserProfile]>,
   'isCallerAdmin' : ActorMethod<[], boolean>,
+  'pruneExpiredMessages' : ActorMethod<[], undefined>,
   'removeReaction' : ActorMethod<[string, bigint, string, string], boolean>,
+  'roomExists' : ActorMethod<[string], boolean>,
   'saveCallerUserProfile' : ActorMethod<[UserProfile], undefined>,
   'sendMessage' : ActorMethod<
     [

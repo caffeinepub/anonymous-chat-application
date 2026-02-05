@@ -144,7 +144,9 @@ export interface backendInterface {
     getMessages(roomId: string): Promise<Array<MessageView>>;
     getUserProfile(user: string): Promise<UserProfile | null>;
     isCallerAdmin(): Promise<boolean>;
+    pruneExpiredMessages(): Promise<void>;
     removeReaction(roomId: string, messageId: bigint, userId: string, emoji: string): Promise<boolean>;
+    roomExists(roomId: string): Promise<boolean>;
     saveCallerUserProfile(profile: UserProfile): Promise<void>;
     sendMessage(roomId: string, content: string, nickname: string, userId: string, replyToId: bigint | null, image: ExternalBlob | null, video: ExternalBlob | null, audio: ExternalBlob | null): Promise<bigint>;
 }
@@ -403,6 +405,20 @@ export class Backend implements backendInterface {
             return result;
         }
     }
+    async pruneExpiredMessages(): Promise<void> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.pruneExpiredMessages();
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.pruneExpiredMessages();
+            return result;
+        }
+    }
     async removeReaction(arg0: string, arg1: bigint, arg2: string, arg3: string): Promise<boolean> {
         if (this.processError) {
             try {
@@ -414,6 +430,20 @@ export class Backend implements backendInterface {
             }
         } else {
             const result = await this.actor.removeReaction(arg0, arg1, arg2, arg3);
+            return result;
+        }
+    }
+    async roomExists(arg0: string): Promise<boolean> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.roomExists(arg0);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.roomExists(arg0);
             return result;
         }
     }

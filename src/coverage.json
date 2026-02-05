@@ -1,72 +1,51 @@
 {
   "kind": "coverage_report",
   "version": "1.0",
-  "generatedAt": "2026-02-03T12:44:57.919Z",
+  "generatedAt": "2026-02-04T10:06:31.377Z",
   "sources": {
     "buildRequest": true,
     "implementationPlan": true
   },
   "requirements": {
-    "total": 3,
-    "implemented": 3,
+    "total": 2,
+    "implemented": 2,
     "items": [
       {
-        "id": "REQ-1",
-        "summary": "Make the reply/quotation preview in each message clickable so that clicking it instantly jumps (no smooth scroll) to the original message being replied to. Apply this behavior to all replies (text, image, audio, video, and any other message type that supports replyToId).",
+        "id": "REQ-5",
+        "summary": "Identify and fix the root cause of the per-send failure so that sending a message succeeds reliably from the ChatRoom UI. In particular, ensure anonymous users (no Internet Identity) can send messages without backend authorization traps (e.g., remove/relax AccessControl permission checks for core chat operations like `sendMessage`, consistent with the app’s anonymous chat intent).",
         "status": "implemented",
         "plannedFiles": [
-          "frontend/src/components/MessageBubble.tsx",
+          "frontend/src/hooks/useActor.ts",
           "frontend/src/components/ChatRoom.tsx"
         ],
         "matchedFiles": [
-          "frontend/src/components/MessageBubble.tsx",
           "frontend/src/components/ChatRoom.tsx"
         ]
       },
       {
-        "id": "REQ-2",
-        "summary": "If the original replied-to message is not currently available in the loaded message list, attempt to load it by refetching messages for the room and then retry the jump. If the original message is still unavailable (e.g., expired due to TTL, deleted, or otherwise missing), show a user-facing notice in English indicating the original message is unavailable and do not crash.",
+        "id": "REQ-6",
+        "summary": "Improve error diagnostics for message send failures to speed up future debugging: when `useSendMessage` fails, ensure the console log includes IC reject details (reject code/message when present) and the sanitized UI continues to show a stable English message via `sanitizeChatError`.",
         "status": "implemented",
         "plannedFiles": [
-          "frontend/src/components/ChatRoom.tsx",
-          "frontend/src/components/MessageBubble.tsx"
+          "frontend/src/utils/chatOperationErrors.ts",
+          "frontend/src/hooks/useQueries.ts"
         ],
         "matchedFiles": [
-          "frontend/src/components/ChatRoom.tsx",
-          "frontend/src/components/MessageBubble.tsx"
-        ]
-      },
-      {
-        "id": "REQ-3",
-        "summary": "Update the message rendering structure so each message in the scrollable chat list has a stable DOM anchor that can be targeted for jumping by message id (including for optimistic messages where possible), without breaking existing reactions, edit/delete, reply, and media playback behaviors.",
-        "status": "implemented",
-        "plannedFiles": [
-          "frontend/src/components/MessageBubble.tsx",
-          "frontend/src/components/ChatRoom.tsx"
-        ],
-        "matchedFiles": [
-          "frontend/src/components/MessageBubble.tsx",
-          "frontend/src/components/ChatRoom.tsx"
+          "frontend/src/utils/chatOperationErrors.ts",
+          "frontend/src/hooks/useQueries.ts"
         ]
       }
     ]
   },
   "changedFiles": [
+    "backend/main.mo",
     "build-request.json",
-    "build-template/Dockerfile",
-    "build-template/LICENSE",
-    "build-template/README.md",
-    "build-template/deploy.sh",
-    "build-template/icp.yaml",
-    "build-template/src/backend/canister.yaml",
-    "build-template/src/frontend/canister.yaml",
-    "caffeine.lock.json",
     "feature_evidence.json",
     "frontend-file-summaries.txt",
     "frontend-implementation-plan.json",
     "frontend/src/components/ChatRoom.tsx",
-    "frontend/src/components/MessageBubble.tsx",
-    "frontend/src/hooks/useInternetIdentity.ts",
+    "frontend/src/hooks/useQueries.ts",
+    "frontend/src/utils/chatOperationErrors.ts",
     "project_state.json",
     "scratch/component-selection.json",
     "spec.md",

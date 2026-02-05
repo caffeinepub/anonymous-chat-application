@@ -4,8 +4,10 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-import { Reply, Edit2, Trash2, Smile, Play, Pause, AlertCircle } from 'lucide-react';
+import { Reply, Edit2, Trash2, Smile, Play, Pause, AlertCircle, Download, Loader2 } from 'lucide-react';
 import { useState, useRef, useEffect } from 'react';
+import { downloadImageAsPNG, downloadVideoAsMP4 } from '../utils/downloadMedia';
+import { toast } from 'sonner';
 
 interface MessageBubbleProps {
   message: MessageView;
@@ -42,6 +44,8 @@ export default function MessageBubble({
   const [audioDuration, setAudioDuration] = useState(0);
   const [audioError, setAudioError] = useState(false);
   const [audioLoading, setAudioLoading] = useState(true);
+  const [isDownloadingVideo, setIsDownloadingVideo] = useState(false);
+  const [videoDownloadProgress, setVideoDownloadProgress] = useState(0);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const isOwnMessage = message.nickname === currentNickname;
 
@@ -55,8 +59,8 @@ export default function MessageBubble({
       .slice(0, 2);
   };
 
-  // Find the message being replied to
-  const repliedToMessage = message.replyToId 
+  // Find the message being replied to - BigInt-safe check
+  const repliedToMessage = message.replyToId !== null && message.replyToId !== undefined
     ? allMessages.find(m => m.id === message.replyToId)
     : null;
 
@@ -89,10 +93,59 @@ export default function MessageBubble({
     setShowReactionPicker(false);
   };
 
-  // Handle reply preview click
+  // Handle reply preview click - BigInt-safe check
   const handleReplyPreviewClick = () => {
-    if (message.replyToId && onJumpToMessage) {
+    if (message.replyToId !== null && message.replyToId !== undefined && onJumpToMessage) {
       onJumpToMessage(message.replyToId);
+    }
+  };
+
+  // Handle image download (PNG format)
+  const handleDownloadImage = async (source: string, filename: string) => {
+    try {
+      const pngFilename = filename.replace(/\.[^.]+$/, '.png');
+      await downloadImageAsPNG(source, pngFilename);
+    } catch (error) {
+      console.error('Failed to download image:', error);
+      toast.error('Failed to download image. Please try again.');
+    }
+  };
+
+  // Handle uploaded image download (PNG format)
+  const handleDownloadUploadedImage = async () => {
+    if (!message.imageUrl) return;
+    
+    try {
+      const filename = `image-${message.id}.png`;
+      await downloadImageAsPNG(message.imageUrl, filename);
+    } catch (error) {
+      console.error('Failed to download image:', error);
+      toast.error('Failed to download image. Please try again.');
+    }
+  };
+
+  // Handle video download (MP4 format)
+  const handleDownloadVideo = async () => {
+    if (!message.videoUrl) return;
+    
+    setIsDownloadingVideo(true);
+    setVideoDownloadProgress(0);
+    
+    try {
+      const filename = `video-${message.id}.mp4`;
+      await downloadVideoAsMP4(
+        message.videoUrl, 
+        filename,
+        (progress) => setVideoDownloadProgress(progress)
+      );
+      toast.success('Video downloaded successfully!');
+    } catch (error) {
+      console.error('Failed to download video:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+      toast.error(`Failed to download video: ${errorMessage}`);
+    } finally {
+      setIsDownloadingVideo(false);
+      setVideoDownloadProgress(0);
     }
   };
 
@@ -255,7 +308,7 @@ export default function MessageBubble({
       try {
         const imageUrl = message.imageUrl.getDirectURL();
         parts.push(
-          <div key="uploaded-image" className="relative">
+          <div key="uploaded-image" className="relative group/image">
             <img
               src={imageUrl}
               alt="Uploaded image"
@@ -275,6 +328,25 @@ export default function MessageBubble({
                 </div>
               </div>
             )}
+            {!imageError && (
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="secondary"
+                      size="icon"
+                      className="absolute top-2 right-2 h-8 w-8 opacity-0 group-hover/image:opacity-100 transition-opacity shadow-lg"
+                      onClick={handleDownloadUploadedImage}
+                    >
+                      <Download className="h-4 w-4" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>Download as PNG</p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            )}
           </div>
         );
       } catch (error) {
@@ -288,7 +360,7 @@ export default function MessageBubble({
       try {
         const videoUrl = message.videoUrl.getDirectURL();
         parts.push(
-          <div key="uploaded-video" className="relative">
+          <div key="uploaded-video" className="relative group/video">
             <video
               src={videoUrl}
               controls
@@ -310,6 +382,34 @@ export default function MessageBubble({
                   <p className="text-xs text-muted-foreground">Video failed to load</p>
                 </div>
               </div>
+            )}
+            {!videoError && (
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="secondary"
+                      size="icon"
+                      className="absolute top-2 right-2 h-8 w-8 opacity-0 group-hover/video:opacity-100 transition-opacity shadow-lg"
+                      onClick={handleDownloadVideo}
+                      disabled={isDownloadingVideo}
+                    >
+                      {isDownloadingVideo ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Download className="h-4 w-4" />
+                      )}
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>
+                      {isDownloadingVideo 
+                        ? `Downloading... ${videoDownloadProgress}%` 
+                        : 'Download video as MP4'}
+                    </p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
             )}
           </div>
         );
@@ -341,7 +441,7 @@ export default function MessageBubble({
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="h-10 w-10 flex-shrink-0"
+                  className="h-10 w-10 shrink-0"
                   onClick={toggleAudioPlayback}
                   disabled={audioLoading || audioError}
                 >
@@ -414,9 +514,9 @@ export default function MessageBubble({
           mediaIndex++;
         }
 
-        // Add the media with error handling
+        // Add the media with error handling and download button
         parts.push(
-          <div key={`media-${index}`} className="relative">
+          <div key={`media-${index}`} className="relative group/embedded">
             <img
               src={url}
               alt="Shared media"
@@ -428,6 +528,23 @@ export default function MessageBubble({
                 target.style.display = 'none';
               }}
             />
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="secondary"
+                    size="icon"
+                    className="absolute top-2 right-2 h-8 w-8 opacity-0 group-hover/embedded:opacity-100 transition-opacity shadow-lg"
+                    onClick={() => handleDownloadImage(url, `embedded-${index}.png`)}
+                  >
+                    <Download className="h-4 w-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>Download as PNG</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
           </div>
         );
 
@@ -447,6 +564,9 @@ export default function MessageBubble({
 
     return parts.length > 0 ? parts : null;
   };
+
+  // Check if reply preview should be shown - BigInt-safe
+  const hasReplyTo = message.replyToId !== null && message.replyToId !== undefined;
 
   return (
     <div 
@@ -469,18 +589,26 @@ export default function MessageBubble({
           )}
         </div>
         <div className="rounded-lg bg-muted/50 p-3 max-w-2xl">
-          {/* Reply Preview - Clickable */}
-          {message.replyToId && (
+          {/* Reply Preview - Clickable, with hard-unavailable behavior */}
+          {hasReplyTo && (
             <button
               onClick={handleReplyPreviewClick}
               className="mb-2 pl-2 border-l-2 border-primary/40 bg-background/50 rounded p-2 w-full text-left hover:bg-background/70 transition-colors cursor-pointer"
             >
-              <p className="text-xs font-semibold text-primary">
-                Replying to {repliedToMessage?.nickname || 'Unknown'}
-              </p>
-              <p className="text-xs text-muted-foreground">
-                {repliedToMessage ? getMessagePreview(repliedToMessage.content) : 'Message not available'}
-              </p>
+              {repliedToMessage ? (
+                <>
+                  <p className="text-xs font-semibold text-primary">
+                    Replying to {repliedToMessage.nickname}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    {getMessagePreview(repliedToMessage.content)}
+                  </p>
+                </>
+              ) : (
+                <p className="text-xs text-muted-foreground italic">
+                  Message unavailable
+                </p>
+              )}
             </button>
           )}
           

@@ -1,22 +1,21 @@
-import Map "mo:core/Map";
 import List "mo:core/List";
-import Nat "mo:core/Nat";
-import Text "mo:core/Text";
+import Map "mo:core/Map";
+import Set "mo:core/Set";
 import Time "mo:core/Time";
-import Storage "blob-storage/Storage";
-import Runtime "mo:core/Runtime";
+import Text "mo:core/Text";
+import Nat "mo:core/Nat";
 import Iter "mo:core/Iter";
+import Array "mo:core/Array";
+import Storage "blob-storage/Storage";
 import MixinStorage "blob-storage/Mixin";
 import MixinAuthorization "authorization/MixinAuthorization";
 import AccessControl "authorization/access-control";
-import Array "mo:core/Array";
-
-
+import Runtime "mo:core/Runtime";
 
 actor {
   let accessControlState = AccessControl.initState();
-  include MixinStorage();
   include MixinAuthorization(accessControlState);
+  include MixinStorage();
 
   type ChatRoom = {
     joinCode : Text;
@@ -62,7 +61,9 @@ actor {
   let messageTTL : Time.Time = 24 * 60 * 60 * 1_000_000_000;
   var nextMessageId : Nat = 0;
 
-  let chatRooms = Map.empty<Text, ChatRoom>();
+  let activeRooms = Set.empty<Text>();
+  let chatContexts = Map.empty<Text, ()>();
+
   let messages = Map.empty<Text, List.List<Message>>();
   let userProfiles = Map.empty<Text, UserProfile>();
 
@@ -77,25 +78,49 @@ actor {
     };
   };
 
-  // Generate unique message IDs
   func nextId() : Nat {
     let id = nextMessageId;
     nextMessageId += 1;
     id;
   };
 
-  // Anyone can create a room (anonymous chat feature)
-  public shared ({ caller }) func createRoom(joinCode : Text) : async Text {
-    if (chatRooms.containsKey(joinCode)) {
-      Runtime.trap("Room already exists");
+  public shared ({ caller }) func pruneExpiredMessages() : async () {
+    if (not AccessControl.isAdmin(accessControlState, caller)) {
+      Runtime.trap("Unauthorized: Only admins can prune messages");
+    };
+    let now = Time.now();
+    for ((roomId, _context) in chatContexts.entries()) {
+      switch (messages.get(roomId)) {
+        case (null) {};
+        case (?msgList) {
+          let validMsgs = msgList.filter(func(msg) { now - msg.timestamp <= messageTTL });
+          if (validMsgs.size() != msgList.size()) {
+            messages.add(roomId, validMsgs);
+          };
+        };
+      };
     };
 
-    let newRoom : ChatRoom = {
-      joinCode;
-      createdAt = Time.now();
+    for ((roomId, msgList) in messages.entries()) {
+      if (msgList.size() == 0 and not activeRooms.contains(roomId)) {
+        messages.remove(roomId);
+      };
     };
-    chatRooms.add(joinCode, newRoom);
-    joinCode;
+  };
+
+  func roomIdWasRecentlyCreated(roomId : Text) : Bool {
+    let currentTime = Time.now();
+    switch (messages.get(roomId)) {
+      case (null) { false };
+      case (?messageList) {
+        messageList.any(func(msg) { currentTime - msg.timestamp < 5_000_000_000 });
+      };
+    };
+  };
+
+  public query func roomExists(roomId : Text) : async Bool {
+    let trimmed = roomId.trim(#char ' ');
+    chatContexts.containsKey(trimmed) or messages.containsKey(trimmed);
   };
 
   func isNotExpired(message : Message) : Bool {
@@ -118,9 +143,34 @@ actor {
     };
   };
 
-  // Anyone can read messages in a room (anonymous chat feature)
+  public shared ({ caller }) func createRoom(joinCode : Text) : async Text {
+    if (not AccessControl.hasPermission(accessControlState, caller, #user)) {
+      Runtime.trap("Unauthorized: Only users can create rooms");
+    };
+    let trimmed = joinCode.trim(#char ' ');
+    if (trimmed.size() == 0) {
+      return "Room join code cannot be empty or whitespace only";
+    };
+
+    if (chatContexts.containsKey(trimmed)) {
+      return "Room already exists";
+    };
+
+    chatContexts.add(trimmed, ());
+    trimmed;
+  };
+
   public query ({ caller }) func getMessages(roomId : Text) : async [MessageView] {
-    switch (messages.get(roomId)) {
+    let trimmed = roomId.trim(#char ' ');
+    if (trimmed.size() == 0) {
+      return [];
+    };
+
+    if (not chatContexts.containsKey(trimmed) and not messages.containsKey(trimmed)) {
+      return [];
+    };
+
+    switch (messages.get(trimmed)) {
       case (null) { [] };
       case (?msgs) {
         let filteredMsgs = msgs.filter(isNotExpired);
@@ -129,8 +179,6 @@ actor {
     };
   };
 
-  // Anyone can send messages (anonymous chat feature)
-  // userId should be a session-based identifier from the frontend (e.g., UUID stored in localStorage)
   public shared ({ caller }) func sendMessage(
     roomId : Text,
     content : Text,
@@ -141,8 +189,9 @@ actor {
     video : ?Storage.ExternalBlob,
     audio : ?Storage.ExternalBlob,
   ) : async Nat {
-    if (chatRooms.get(roomId) == null) {
-      Runtime.trap("Room does not exist");
+    let trimmedRoomId = roomId.trim(#char ' ');
+    if (trimmedRoomId.size() == 0 or not chatContexts.containsKey(trimmedRoomId)) {
+      return 0;
     };
 
     let messageId = nextId();
@@ -161,14 +210,12 @@ actor {
       owner = userId;
     };
 
-    let roomMessages = ensureRoomMessages(roomId);
+    let roomMessages = ensureRoomMessages(trimmedRoomId);
     roomMessages.add(newMessage);
 
     messageId;
   };
 
-  // Only message owner can edit their own message
-  // userId must match the owner field set during sendMessage
   public shared ({ caller }) func editMessage(
     roomId : Text,
     messageId : Nat,
@@ -178,6 +225,9 @@ actor {
     newVideo : ?Storage.ExternalBlob,
     newAudio : ?Storage.ExternalBlob,
   ) : async Bool {
+    if (not AccessControl.hasPermission(accessControlState, caller, #user)) {
+      Runtime.trap("Unauthorized: Only users can edit messages");
+    };
     switch (messages.get(roomId)) {
       case (null) { false };
       case (?msgs) {
@@ -185,7 +235,7 @@ actor {
           case (null) { false };
           case (?targetMsg) {
             if (targetMsg.owner != userId) {
-              Runtime.trap("Unauthorized: You can only edit your own messages");
+              return false;
             };
 
             let updatedMessages = msgs.map<Message, Message>(
@@ -212,9 +262,10 @@ actor {
     };
   };
 
-  // Only message owner can delete their own message
-  // userId must match the owner field set during sendMessage
   public shared ({ caller }) func deleteMessage(roomId : Text, messageId : Nat, userId : Text) : async Bool {
+    if (not AccessControl.hasPermission(accessControlState, caller, #user)) {
+      Runtime.trap("Unauthorized: Only users can delete messages");
+    };
     switch (messages.get(roomId)) {
       case (null) { false };
       case (?msgs) {
@@ -222,7 +273,7 @@ actor {
           case (null) { false };
           case (?targetMsg) {
             if (targetMsg.owner != userId) {
-              Runtime.trap("Unauthorized: You can only delete your own messages");
+              return false;
             };
 
             let filteredMessages = msgs.filter(
@@ -236,7 +287,6 @@ actor {
     };
   };
 
-  // Anyone in the room can add reactions (anonymous chat feature)
   public shared ({ caller }) func addReaction(
     roomId : Text,
     messageId : Nat,
@@ -266,7 +316,6 @@ actor {
     };
   };
 
-  // Anyone can remove their reactions (anonymous chat feature)
   public shared ({ caller }) func removeReaction(
     roomId : Text,
     messageId : Nat,
@@ -296,27 +345,28 @@ actor {
     };
   };
 
-  // Query endpoint to get message TTL for frontend synchronization
-  public query func getMessageTTL() : async Time.Time {
+  public query ({ caller }) func getMessageTTL() : async Time.Time {
     messageTTL;
   };
 
-  // User profile management (for authenticated users if needed in future)
   public query ({ caller }) func getCallerUserProfile() : async ?UserProfile {
-    let callerText = caller.toText();
-    userProfiles.get(callerText);
+    if (not AccessControl.hasPermission(accessControlState, caller, #user)) {
+      Runtime.trap("Unauthorized: Only users can view profiles");
+    };
+    userProfiles.get(caller.toText());
   };
 
   public query ({ caller }) func getUserProfile(user : Text) : async ?UserProfile {
-    let callerText = caller.toText();
-    if (callerText != user and not AccessControl.isAdmin(accessControlState, caller)) {
-      Runtime.trap("Unauthorized: Can only view your own profile");
+    if (not AccessControl.isAdmin(accessControlState, caller)) {
+      Runtime.trap("Unauthorized: Only admins can view other users' profiles");
     };
     userProfiles.get(user);
   };
 
   public shared ({ caller }) func saveCallerUserProfile(profile : UserProfile) : async () {
-    let callerText = caller.toText();
-    userProfiles.add(callerText, profile);
+    if (not AccessControl.hasPermission(accessControlState, caller, #user)) {
+      Runtime.trap("Unauthorized: Only users can save profiles");
+    };
+    userProfiles.add(caller.toText(), profile);
   };
 };

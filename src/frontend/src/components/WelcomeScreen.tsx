@@ -4,8 +4,11 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
-import { useCreateRoom } from '../hooks/useQueries';
-import { toast } from 'sonner';
+import { useCreateRoom, useMessageTTL } from '../hooks/useQueries';
+import { useActor } from '../hooks/useActor';
+import { sanitizeChatError } from '../utils/chatErrorMessages';
+import { retryWithBackoff } from '../utils/retry';
+import { toastErrorOnce, toastSuccessOnce } from '../utils/toastOnce';
 
 interface WelcomeScreenProps {
   onJoinRoom: (roomId: string, nickname: string) => void;
@@ -16,40 +19,102 @@ export default function WelcomeScreen({ onJoinRoom }: WelcomeScreenProps) {
   const [newRoomCode, setNewRoomCode] = useState('');
   const [createNickname, setCreateNickname] = useState('');
   const [joinNickname, setJoinNickname] = useState('');
+  const [isJoining, setIsJoining] = useState(false);
   const createRoom = useCreateRoom();
+  const { data: messageTTL } = useMessageTTL();
+  const { actor, isFetching: isActorFetching } = useActor();
+
+  // Calculate TTL in hours for display
+  const messageTTLHours = messageTTL ? Number(messageTTL / 3_600_000_000_000n) : 24;
+
+  const isActorReady = !!actor && !isActorFetching;
 
   const handleCreateRoom = async () => {
-    if (!newRoomCode.trim()) {
-      toast.error('Please enter a room code');
+    const trimmedCode = newRoomCode.trim();
+    const trimmedNickname = createNickname.trim();
+
+    if (!trimmedCode) {
+      toastErrorOnce('Please enter a room code', 'create-empty-code');
       return;
     }
 
-    if (!createNickname.trim()) {
-      toast.error('Please enter a nickname');
+    if (!trimmedNickname) {
+      toastErrorOnce('Please enter a nickname', 'create-empty-nickname');
+      return;
+    }
+
+    if (!isActorReady) {
+      toastErrorOnce('Connection not ready. Please wait and try again.', 'create-actor-not-ready');
       return;
     }
 
     try {
-      await createRoom.mutateAsync(newRoomCode.trim());
-      toast.success('Room created successfully!');
-      onJoinRoom(newRoomCode.trim(), createNickname.trim());
+      // Create room
+      await createRoom.mutateAsync(trimmedCode);
+      
+      toastSuccessOnce('Room created successfully!', `create-success-${trimmedCode}`);
+      
+      // Join immediately after successful creation
+      onJoinRoom(trimmedCode, trimmedNickname);
     } catch (error) {
-      toast.error('Failed to create room. Code may already exist.');
+      // Log raw error for diagnostics
+      console.error('[Room Creation] Raw error:', error);
+      
+      // Sanitize and display
+      const sanitizedError = sanitizeChatError(error);
+      console.error('[Room Creation] Sanitized error message:', sanitizedError);
+      
+      toastErrorOnce(sanitizedError, `create-error-${trimmedCode}`);
     }
   };
 
-  const handleJoinRoom = () => {
-    if (!joinCode.trim()) {
-      toast.error('Please enter a join code');
+  const handleJoinRoom = async () => {
+    const trimmedCode = joinCode.trim();
+    const trimmedNickname = joinNickname.trim();
+
+    if (!trimmedCode) {
+      toastErrorOnce('Please enter a join code', 'join-empty-code');
       return;
     }
 
-    if (!joinNickname.trim()) {
-      toast.error('Please enter a nickname');
+    if (!trimmedNickname) {
+      toastErrorOnce('Please enter a nickname', 'join-empty-nickname');
       return;
     }
 
-    onJoinRoom(joinCode.trim(), joinNickname.trim());
+    if (!isActorReady) {
+      toastErrorOnce('Connection not ready. Please wait and try again.', 'join-actor-not-ready');
+      return;
+    }
+
+    setIsJoining(true);
+    
+    try {
+      // Validate room exists with retry for transient failures
+      const exists = await retryWithBackoff(
+        async () => {
+          return await actor!.roomExists(trimmedCode);
+        },
+        {
+          maxAttempts: 3,
+          initialDelayMs: 100,
+          maxDelayMs: 1000,
+        }
+      );
+      
+      if (!exists) {
+        toastErrorOnce('Room does not exist. Please check the room code.', `join-not-exist-${trimmedCode}`);
+        return;
+      }
+
+      onJoinRoom(trimmedCode, trimmedNickname);
+    } catch (error) {
+      console.error('[Room Join] Error validating room:', error);
+      const sanitizedError = sanitizeChatError(error);
+      toastErrorOnce(sanitizedError, `join-error-${trimmedCode}`);
+    } finally {
+      setIsJoining(false);
+    }
   };
 
   return (
@@ -68,7 +133,7 @@ export default function WelcomeScreen({ onJoinRoom }: WelcomeScreenProps) {
             Anonymous Real-Time Chat
           </h2>
           <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
-            Create secure chat rooms and share join codes with friends. Messages automatically delete after 24 hours.
+            Create secure chat rooms and share join codes with friends. Messages automatically delete after {messageTTLHours} hours.
           </p>
         </div>
 
@@ -92,7 +157,7 @@ export default function WelcomeScreen({ onJoinRoom }: WelcomeScreenProps) {
             </CardHeader>
             <CardContent>
               <p className="text-sm text-muted-foreground">
-                Messages automatically delete after 24 hours for privacy.
+                Messages automatically delete after {messageTTLHours} hours for privacy.
               </p>
             </CardContent>
           </Card>
@@ -130,6 +195,7 @@ export default function WelcomeScreen({ onJoinRoom }: WelcomeScreenProps) {
                   value={createNickname}
                   onChange={(e) => setCreateNickname(e.target.value)}
                   maxLength={20}
+                  disabled={!isActorReady}
                 />
               </div>
               <div className="space-y-2">
@@ -140,15 +206,16 @@ export default function WelcomeScreen({ onJoinRoom }: WelcomeScreenProps) {
                   value={newRoomCode}
                   onChange={(e) => setNewRoomCode(e.target.value)}
                   onKeyDown={(e) => e.key === 'Enter' && handleCreateRoom()}
+                  disabled={!isActorReady}
                 />
               </div>
               <Button
                 onClick={handleCreateRoom}
-                disabled={createRoom.isPending}
+                disabled={createRoom.isPending || !isActorReady}
                 className="w-full"
                 size="lg"
               >
-                {createRoom.isPending ? 'Creating...' : 'Create Room'}
+                {!isActorReady ? 'Connecting...' : createRoom.isPending ? 'Creating...' : 'Create Room'}
               </Button>
             </CardContent>
           </Card>
@@ -172,6 +239,7 @@ export default function WelcomeScreen({ onJoinRoom }: WelcomeScreenProps) {
                   value={joinNickname}
                   onChange={(e) => setJoinNickname(e.target.value)}
                   maxLength={20}
+                  disabled={!isActorReady}
                 />
               </div>
               <div className="space-y-2">
@@ -182,15 +250,17 @@ export default function WelcomeScreen({ onJoinRoom }: WelcomeScreenProps) {
                   value={joinCode}
                   onChange={(e) => setJoinCode(e.target.value)}
                   onKeyDown={(e) => e.key === 'Enter' && handleJoinRoom()}
+                  disabled={!isActorReady}
                 />
               </div>
               <Button
                 onClick={handleJoinRoom}
+                disabled={isJoining || !isActorReady}
                 variant="secondary"
                 className="w-full"
                 size="lg"
               >
-                Join Room
+                {!isActorReady ? 'Connecting...' : isJoining ? 'Validating...' : 'Join Room'}
               </Button>
             </CardContent>
           </Card>

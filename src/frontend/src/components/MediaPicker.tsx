@@ -23,7 +23,7 @@ interface TenorMedia {
 
 interface CustomSticker {
   id: string;
-  blob: ExternalBlob;
+  bytes: string; // Base64-encoded bytes for persistence
   preview: string;
   timestamp: number;
 }
@@ -64,17 +64,11 @@ export default function MediaPicker({ onSelect, onClose }: MediaPickerProps) {
         const expiryTime = Date.now() - STICKER_TTL_MS;
         const validStickers = parsed.filter((s: CustomSticker) => s.timestamp > expiryTime);
         
-        // Reconstruct ExternalBlob objects from URLs
-        const stickers = validStickers.map((s: any) => ({
-          ...s,
-          blob: ExternalBlob.fromURL(s.blobUrl),
-        }));
-        
-        setCustomStickers(stickers);
+        setCustomStickers(validStickers);
         
         // Save back filtered stickers
         if (validStickers.length !== parsed.length) {
-          saveCustomStickers(stickers);
+          saveCustomStickers(validStickers);
         }
       }
     } catch (error) {
@@ -84,14 +78,7 @@ export default function MediaPicker({ onSelect, onClose }: MediaPickerProps) {
 
   const saveCustomStickers = (stickers: CustomSticker[]) => {
     try {
-      // Store with blob URLs for persistence
-      const toStore = stickers.map(s => ({
-        id: s.id,
-        blobUrl: s.blob.getDirectURL(),
-        preview: s.preview,
-        timestamp: s.timestamp,
-      }));
-      localStorage.setItem('customStickers', JSON.stringify(toStore));
+      localStorage.setItem('customStickers', JSON.stringify(stickers));
     } catch (error) {
       console.error('Error saving custom stickers:', error);
     }
@@ -123,10 +110,8 @@ export default function MediaPicker({ onSelect, onClose }: MediaPickerProps) {
       const arrayBuffer = await file.arrayBuffer();
       const uint8Array = new Uint8Array(arrayBuffer);
       
-      // Create ExternalBlob with upload progress tracking
-      const blob = ExternalBlob.fromBytes(uint8Array).withUploadProgress((percentage) => {
-        setUploadProgress(percentage);
-      });
+      // Convert to base64 for persistent storage
+      const base64 = btoa(String.fromCharCode(...uint8Array));
       
       // Create preview URL
       const previewUrl = URL.createObjectURL(file);
@@ -134,7 +119,7 @@ export default function MediaPicker({ onSelect, onClose }: MediaPickerProps) {
       // Create new sticker
       const newSticker: CustomSticker = {
         id: `sticker-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-        blob,
+        bytes: base64,
         preview: previewUrl,
         timestamp: Date.now(),
       };
@@ -159,9 +144,24 @@ export default function MediaPicker({ onSelect, onClose }: MediaPickerProps) {
     }
   };
 
-  const handleStickerSelect = (sticker: CustomSticker) => {
-    // Send the sticker's blob URL directly
-    onSelect(sticker.blob.getDirectURL());
+  const handleStickerSelect = async (sticker: CustomSticker) => {
+    try {
+      // Reconstruct ExternalBlob from stored base64 bytes
+      const binaryString = atob(sticker.bytes);
+      const bytes = new Uint8Array(binaryString.length);
+      for (let i = 0; i < binaryString.length; i++) {
+        bytes[i] = binaryString.charCodeAt(i);
+      }
+      
+      const blob = ExternalBlob.fromBytes(bytes);
+      const blobUrl = blob.getDirectURL();
+      
+      // Send the blob URL
+      onSelect(blobUrl);
+    } catch (error) {
+      console.error('Error loading sticker:', error);
+      toast.error('Failed to load sticker');
+    }
   };
 
   const handleDeleteSticker = (stickerId: string, e: React.MouseEvent) => {

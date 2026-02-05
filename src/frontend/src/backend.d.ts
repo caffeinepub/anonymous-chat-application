@@ -51,7 +51,9 @@ export interface backendInterface {
     getMessages(roomId: string): Promise<Array<MessageView>>;
     getUserProfile(user: string): Promise<UserProfile | null>;
     isCallerAdmin(): Promise<boolean>;
+    pruneExpiredMessages(): Promise<void>;
     removeReaction(roomId: string, messageId: bigint, userId: string, emoji: string): Promise<boolean>;
+    roomExists(roomId: string): Promise<boolean>;
     saveCallerUserProfile(profile: UserProfile): Promise<void>;
     sendMessage(roomId: string, content: string, nickname: string, userId: string, replyToId: bigint | null, image: ExternalBlob | null, video: ExternalBlob | null, audio: ExternalBlob | null): Promise<bigint>;
 }

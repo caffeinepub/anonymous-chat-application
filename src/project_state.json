@@ -1,7 +1,7 @@
 {
   "schemaVersion": "1.0.0",
-  "projectStateVersion": 5,
-  "summary": "SecureChat is an anonymous, room-code-based real-time chat web app built as a React SPA with an Internet Computer (Motoko) canister backend. Users can create or join chat rooms by code, send text and rich media (images, GIFs/URLs, custom stickers, video uploads, and recorded audio), reply to messages, edit/delete their own messages, and react with emojis. The UI emphasizes “instant” feel via React Query optimistic updates and fast polling, while the backend enforces 24-hour message TTL on reads and stores optional media blobs alongside messages.",
+  "projectStateVersion": 72,
+  "summary": "SecureChat is a completely anonymous, room-code-based real-time chat web app built as a React SPA with an Internet Computer (Motoko) canister backend. Users create/join rooms by code and use nicknames for attribution. Users can send text and rich media (images, GIFs/URLs, video uploads, and recorded audio), reply to messages, edit/delete their own messages, and react with emojis. The UI emphasizes an “instant” feel via React Query optimistic updates and fast polling, while the backend enforces 24-hour message TTL on reads and stores optional media blobs alongside messages.",
   "existing_features": [
     {
       "id": "IF-1",
@@ -157,17 +157,6 @@
       "version": 1
     },
     {
-      "id": "IF-15",
-      "title": "Custom sticker upload with local TTL",
-      "synonyms": [
-        "My Stickers",
-        "Sticker library"
-      ],
-      "description": "Users can upload small images as custom stickers (validated to 2MB), which are stored in localStorage with timestamps and expire after 24 hours. Stickers are reconstructed via ExternalBlob.fromURL and can be inserted into chat as blob URLs.",
-      "reqIds": [],
-      "version": 1
-    },
-    {
       "id": "IF-16",
       "title": "Embedded media URL detection in message text",
       "synonyms": [
@@ -234,39 +223,134 @@
       "version": 1
     },
     {
-      "id": "feature-make-the-reply-quotation-preview-in-each-message-clickable-so-that-clicking-it-instantly-jumps-no-smooth-scroll-to-the-original-message-being-replied-to-apply-this-behavior-to-all-replies-text-image-audio-video-and-any-other-message-type-that-supports-replytoid",
-      "title": "Make the reply/quotation preview in each message clickable so that clicking it instantly jumps (no smooth scroll) to the original message being replied to. Apply this behavior to all replies (text, image, audio, video, and any other message type that supports replyToId).",
+      "id": "IF-22",
+      "title": "Jump to replied-to/original message from reply preview",
+      "synonyms": [
+        "Scroll to reply target",
+        "Tap reply preview to navigate"
+      ],
+      "description": "Tapping/clicking the replied-to preview in a message navigates (scrolls/jumps) to the original message referenced by replyToId, including when the replied-to content contains media (image/audio/video).",
       "reqIds": [
+        "AR-1"
+      ],
+      "version": 1
+    },
+    {
+      "id": "IF-23",
+      "title": "In-app camera access and video recording",
+      "synonyms": [
+        "Camera capture",
+        "Video recorder",
+        "Record video message"
+      ],
+      "description": "Frontend includes a camera hook (useCamera) and a VideoRecorder component to access the device camera and record video directly in-app for sending as chat media.",
+      "reqIds": [],
+      "version": 1
+    },
+    {
+      "id": "IF-24",
+      "title": "Fully anonymous core chat operations (no Internet Identity required)",
+      "synonyms": [
+        "Guest/anonymous messaging enabled",
+        "No role gating for chat ops"
+      ],
+      "description": "Core chat operations are allowed for any caller (including anonymous/unauthenticated), without requiring Internet Identity or backend role checks. This includes sending messages and other room/message interactions while preserving existing room existence validation and userId-based ownership enforcement for edit/delete. Admin-only restrictions remain for maintenance/admin endpoints.",
+      "reqIds": [
+        "AR-3",
+        "AR-4",
+        "AR-5",
+        "AR-6"
+      ],
+      "version": 1
+    },
+    {
+      "id": "IF-25",
+      "title": "Download received media attachments",
+      "synonyms": [
+        "Download image/video/audio",
+        "Save attachment"
+      ],
+      "description": "MessageBubble renders media attachments with a download action that fetches the underlying media URL/blob and saves it locally using a shared downloadMedia/downloadImage utility, handling common browser limitations and file naming.",
+      "reqIds": [
+        "AR-7"
+      ],
+      "version": 1
+    },
+    {
+      "id": "IF-26",
+      "title": "Backend room validation on message reads",
+      "synonyms": [
+        "getMessages validates room existence",
+        "Stable room-not-found error"
+      ],
+      "description": "Backend getMessages(roomId) now trims/sanitizes the roomId and traps with a stable error (e.g., \"Room does not exist\") when the room is not present, instead of returning an empty list for unknown rooms.",
+      "reqIds": [
+        "AR-8",
         "REQ-1"
       ],
       "version": 1
     },
     {
-      "id": "feature-if-the-original-replied-to-message-is-not-currently-available-in-the-loaded-message-list-attempt-to-load-it-by-refetching-messages-for-the-room-and-then-retry-the-jump-if-the-original-message-is-still-unavailable-e-g-expired-due-to-ttl-deleted-or-otherwise-missing-show-a-user-facing-notice-in-english-indicating-the-original-message-is-unavailable-and-do-not-crash",
-      "title": "If the original replied-to message is not currently available in the loaded message list, attempt to load it by refetching messages for the room and then retry the jump. If the original message is still unavailable (e.g., expired due to TTL, deleted, or otherwise missing), show a user-facing notice in English indicating the original message is unavailable and do not crash.",
+      "id": "IF-27",
+      "title": "Auto-leave room on room-invalid errors",
+      "synonyms": [
+        "Leave room on \"Room does not exist\"",
+        "onLeave wired"
+      ],
+      "description": "ChatRoom wires and uses the existing onLeave callback: when message fetch/send encounters a room-nonexistent error (sanitized to a user-facing message), the UI shows a toast and automatically navigates back to the Welcome screen.",
       "reqIds": [
+        "AR-9",
         "REQ-2"
       ],
       "version": 1
     },
     {
-      "id": "feature-update-the-message-rendering-structure-so-each-message-in-the-scrollable-chat-list-has-a-stable-dom-anchor-that-can-be-targeted-for-jumping-by-message-id-including-for-optimistic-messages-where-possible-without-breaking-existing-reactions-edit-delete-reply-and-media-playback-behaviors",
-      "title": "Update the message rendering structure so each message in the scrollable chat list has a stable DOM anchor that can be targeted for jumping by message id (including for optimistic messages where possible), without breaking existing reactions, edit/delete, reply, and media playback behaviors.",
+      "id": "IF-28",
+      "title": "Reliable leave-room cleanup (cancel queries and clear caches)",
+      "synonyms": [
+        "Cancel in-flight polling on leave",
+        "Remove React Query room caches"
+      ],
+      "description": "When leaving a room, the app cancels/removes React Query caches and in-flight operations for room-scoped queries (at minimum ['messages', roomId] and ['roomExists', roomId]) before clearing currentRoom state, preventing stale polling/errors after exit.",
       "reqIds": [
+        "AR-10",
         "REQ-3"
+      ],
+      "version": 1
+    },
+    {
+      "id": "IF-29",
+      "title": "Actionable join-room error diagnostics",
+      "synonyms": [
+        "Consistent join failure toast",
+        "Join button re-enabled on failure"
+      ],
+      "description": "WelcomeScreen join flow now produces a single sanitized error toast on validation failure (roomExists false/throws), keeps the user on the Welcome screen, and reliably returns the join button/loading state to enabled/idle.",
+      "reqIds": [
+        "AR-11",
+        "REQ-4"
+      ],
+      "version": 1
+    },
+    {
+      "id": "feature-identify-and-fix-the-root-cause-of-the-per-send-failure-so-that-sending-a-message-succeeds-reliably-from-the-chatroom-ui-in-particular-ensure-anonymous-users-no-internet-identity-can-send-messages-without-backend-authorization-traps-e-g-remove-relax-accesscontrol-permission-checks-for-core-chat-operations-like-sendmessage-consistent-with-the-app-s-anonymous-chat-intent",
+      "title": "Identify and fix the root cause of the per-send failure so that sending a message succeeds reliably from the ChatRoom UI. In particular, ensure anonymous users (no Internet Identity) can send messages without backend authorization traps (e.g., remove/relax AccessControl permission checks for core chat operations like `sendMessage`, consistent with the app’s anonymous chat intent).",
+      "reqIds": [
+        "REQ-5"
+      ],
+      "version": 1
+    },
+    {
+      "id": "feature-improve-error-diagnostics-for-message-send-failures-to-speed-up-future-debugging-when-usesendmessage-fails-ensure-the-console-log-includes-ic-reject-details-reject-code-message-when-present-and-the-sanitized-ui-continues-to-show-a-stable-english-message-via-sanitizechaterror",
+      "title": "Improve error diagnostics for message send failures to speed up future debugging: when `useSendMessage` fails, ensure the console log includes IC reject details (reject code/message when present) and the sanitized UI continues to show a stable English message via `sanitizeChatError`.",
+      "reqIds": [
+        "REQ-6"
       ],
       "version": 1
     }
   ],
-  "new_feature_requests": [
-    {
-      "id": "AR-1",
-      "summary": "When tapping the quoted/replied-to preview (especially for image/audio/video replies), scroll/jump to the original message that was replied to",
-      "reqIds": [],
-      "status": "pending"
-    }
-  ],
-  "architecturalNotes": [
+  "new_feature_requests": [],
+  "architectural_notes": [
     "Frontend is a React + TypeScript SPA using TanStack React Query for data fetching/mutations with cache invalidation, optimistic updates, and rollback handling.",
     "UI is composed of small components (WelcomeScreen, ChatRoom, MessageBubble, MediaPicker, EmojiPicker, AudioRecorder, VideoUploader) and styled with TailwindCSS (OKLCH theme) plus shadcn/ui primitives.",
     "Near-real-time updates are implemented via client-side polling (refetch interval ~1.5s) rather than websocket/push.",
@@ -278,24 +362,38 @@
     "Media attachments are represented in the frontend via an ExternalBlob abstraction that can be created from bytes or URL and can report upload progress; MessageBubble renders uploaded media using ExternalBlob.getDirectURL().",
     "Media/GIF discovery uses direct browser fetch calls to Tenor’s API from the client; custom stickers are persisted in localStorage with a TTL aligned to message retention.",
     "Mobile UX is specifically addressed (safe-area padding, dvh-based height, preventing iOS zoom, preventing body scroll in chat mode).",
-    "Reply-preview click behavior: apply to all replies (including text). On click, instantly jump to the original message; if the original is outside the currently loaded range, load older messages and then jump. If the original has expired due to TTL, show an 'Original message unavailable' notice (implied edge case handling)."
+    "Reply previews in MessageBubble are interactive: they trigger a scroll/jump-to-message behavior (by messageId) to bring the original replied-to message into view within the ChatRoom message list.",
+    "Reply preview TTL behavior decision: use hard-unavailable handling (Behavior B) — once the replied-to message has passed TTL/expired, the reply preview should show “Message unavailable” and not attempt jump/navigation or author attribution.",
+    "Reply-to navigation behavior decisions: apply to ALL replies (text + media). On clicking reply preview, perform an instant jump to the original message. If the original message is not currently loaded but is still within TTL, the client should load older messages as needed and then jump. If the original message is expired/deleted (outside TTL), use hard-unavailable handling: show “Message unavailable”, do not navigate/jump, and do not show author attribution.",
+    "A camera capture subsystem was added on the frontend (useCamera hook + VideoRecorder component) to support direct device-camera recording flows.",
+    "Repository now includes a build-template React project scaffold (Dockerfile, deploy scripts, ICP canister yamls, shadcn/ui component set, and tooling scripts) alongside the main app codebase.",
+    "Backend dependencies/components were updated (authorization v4.0.0, blob-storage v4.0.0, http-outcalls v3.0.0, motoko-core).",
+    "Planned work: perform a systematic end-to-end bug-fix pass across frontend + backend with highest priority on (1) message sending reliability and (2) room creation/joining correctness; behavioral/backend changes are allowed if needed for stability.",
+    "Decision/intent: Chat participation (sending messages) must be allowed for everyone in a room, including fully anonymous/guest users without Internet Identity; identity in chat should be completely anonymous and based on the nickname system. Internet Identity (if present) should not be required for chat operations.",
+    "Backend authorization/role checks were removed/bypassed for core chat operations (room creation and message interactions), making participation fully anonymous (nickname + local userId-based) while keeping admin-only restrictions for maintenance/admin endpoints.",
+    "Stickers feature was removed from the media picker; rich media now focuses on images, GIF discovery (Tenor), and URL sharing (plus audio/video uploads).",
+    "Room existence validation now occurs server-side in getMessages (trim + trap on unknown roomId) to avoid ambiguous empty reads; frontend standardizes on a sanitized \"Room does not exist\" error string for UX decisions.",
+    "Room lifecycle handling: leaving a room explicitly cancels/removes React Query room-scoped queries to stop polling and suppress stale errors after navigation.",
+    "Media download support added via shared downloadMedia/downloadImage utilities used by message media renderers."
   ],
-  "knownIssues": [
-    "Room existence check is unreliable: backend getMessages(roomId) returns [] for unknown roomIds (does not validate that the room exists), so frontend useRoomExists (which calls getMessages) will typically report that a room exists even when it doesn’t; sendMessage will later trap with “Room does not exist”.",
+  "known_issues": [
     "Message TTL is only applied as a filter on read (getMessages); expired messages are not pruned from storage, so memory can grow unbounded over time.",
     "Frontend useMessageTTL is hardcoded to 24h and does not call the backend getMessageTTL query, risking configuration drift.",
     "createRoom mutation invalidates a ['rooms'] query key, but no corresponding rooms list query is present in the provided code (likely dead/unused invalidation).",
     "Tenor API key is hardcoded in the client (publicly exposed) and could be rate-limited/abused; there is no server-side proxying or key protection.",
     "Environment variable name in blob storage cashier principal lookup appears misspelled: CAFFFEINE_STORAGE_CASHIER_PRINCIPAL (triple 'F'), which may cause runtime traps if operators set CAFFEINE_… instead.",
     "Backend access-control initialization traps if CAFFEINE_ADMIN_TOKEN env var is not set; authenticated flows that call _initializeAccessControlWithSecret will fail hard in that environment.",
-    "Frontend reference indicates a VideoRecorder component exists, but the provided frontend/src/components/VideoRecorder.tsx file is empty (build/runtime issues likely if imported elsewhere)."
+    "Reply-to-message navigation incorrectly shows “Message unavailable” even when the original message still exists in the chat and should be navigable.",
+    "Reply preview attribution is incorrect: reply previews can show “replied by unknown person” instead of the actual message author.",
+    "Message sending/fetching can fail due to backend canister being stopped (IC0508 reject_code=5) and/or repeated deployment failures; results in 'Failed to send message' and inability to send/receive.",
+    "Video uploads may not be visible/playable for message recipients even when the sender successfully uploads/sends (receiver-side rendering/storage linkage issue).",
+    "UI copy/config drift: some parts of the UI (e.g., footer/cover page) still state messages delete after 2 hours even after retention was changed to 24 hours.",
+    "Message sending is still failing with an error on every send attempt (not necessarily the \"canister stopped\" IC0508 case); regression persists across recent deployments and needs root-cause fix."
   ],
-  "isFixRequest": false,
+  "isFixRequest": true,
   "generatedImages": [],
   "gameProjectType": "none",
   "projectName": "SecureChat",
   "clarification_mode": "instant",
-  "clarification_rounds": 0,
-  "requiresBackendChanges": false,
-  "requiresFrontendChanges": true
+  "clarification_rounds": 0
 }

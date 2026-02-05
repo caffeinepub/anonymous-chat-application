@@ -25,7 +25,6 @@ import {
   useRemoveReaction
 } from '../hooks/useQueries';
 import { useActor } from '../hooks/useActor';
-import { toast } from 'sonner';
 import MessageBubble from './MessageBubble';
 import EmojiPicker from './EmojiPicker';
 import MediaPicker from './MediaPicker';
@@ -33,12 +32,22 @@ import AudioRecorder from './AudioRecorder';
 import VideoUploader from './VideoUploader';
 import type { MessageView } from '../backend';
 import { ExternalBlob } from '../backend';
+import { sanitizeChatError } from '../utils/chatErrorMessages';
+import { toastErrorOnce, toastSuccessOnce } from '../utils/toastOnce';
 
 interface ChatRoomProps {
   roomId: string;
   nickname: string;
   onLeave: () => void;
   onNicknameChange: (newNickname: string) => void;
+}
+
+interface UnsentMessagePayload {
+  content: string;
+  replyToId: bigint | null;
+  image: ExternalBlob | null;
+  video: ExternalBlob | null;
+  audio: ExternalBlob | null;
 }
 
 export default function ChatRoom({ roomId, nickname }: ChatRoomProps) {
@@ -48,6 +57,7 @@ export default function ChatRoom({ roomId, nickname }: ChatRoomProps) {
   const [showAudioRecorder, setShowAudioRecorder] = useState(false);
   const [showVideoUploader, setShowVideoUploader] = useState(false);
   const [sendError, setSendError] = useState<string | null>(null);
+  const [unsentPayload, setUnsentPayload] = useState<UnsentMessagePayload | null>(null);
   const [replyingTo, setReplyingTo] = useState<MessageView | null>(null);
   const [editingMessage, setEditingMessage] = useState<MessageView | null>(null);
   const [messageToDelete, setMessageToDelete] = useState<MessageView | null>(null);
@@ -57,6 +67,7 @@ export default function ChatRoom({ roomId, nickname }: ChatRoomProps) {
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [videoPreview, setVideoPreview] = useState<string | null>(null);
   const [uploadProgress, setUploadProgress] = useState<number>(0);
+  const [isUploading, setIsUploading] = useState(false);
   const scrollViewportRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -129,12 +140,12 @@ export default function ChatRoom({ roomId, nickname }: ChatRoomProps) {
           retryElement.scrollIntoView({ behavior: 'auto', block: 'center' });
         } else {
           // Still not found after refetch
-          toast.error('Original message unavailable');
+          toastErrorOnce('Original message unavailable', 'jump-message-unavailable');
         }
       }, 100);
     } catch (error) {
       console.error('Failed to refetch messages:', error);
-      toast.error('Original message unavailable');
+      toastErrorOnce('Original message unavailable', 'jump-message-error');
     }
   };
 
@@ -216,16 +227,17 @@ export default function ChatRoom({ roomId, nickname }: ChatRoomProps) {
 
     const validTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
     if (!validTypes.includes(file.type)) {
-      toast.error('Please select a valid image file (JPEG, PNG, GIF, or WEBP)');
+      toastErrorOnce('Please select a valid image file (JPEG, PNG, GIF, or WEBP)', 'invalid-image-type');
       return;
     }
 
     const maxSize = 5 * 1024 * 1024;
     if (file.size > maxSize) {
-      toast.error('Image size must be less than 5MB');
+      toastErrorOnce('Image size must be less than 5MB', 'image-too-large');
       return;
     }
 
+    setIsUploading(true);
     try {
       const arrayBuffer = await file.arrayBuffer();
       const uint8Array = new Uint8Array(arrayBuffer);
@@ -239,10 +251,12 @@ export default function ChatRoom({ roomId, nickname }: ChatRoomProps) {
       const previewUrl = URL.createObjectURL(file);
       setImagePreview(previewUrl);
       
-      toast.success('Image selected! Click send to share.');
+      toastSuccessOnce('Image selected! Click send to share.', 'image-selected');
     } catch (error) {
       console.error('Error processing image:', error);
-      toast.error('Failed to process image');
+      toastErrorOnce('Failed to process image', 'image-process-error');
+    } finally {
+      setIsUploading(false);
     }
 
     if (fileInputRef.current) {
@@ -265,16 +279,17 @@ export default function ChatRoom({ roomId, nickname }: ChatRoomProps) {
 
         const validTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
         if (!validTypes.includes(file.type)) {
-          toast.error('Please paste a valid image format (JPEG, PNG, GIF, or WEBP)');
+          toastErrorOnce('Please paste a valid image format (JPEG, PNG, GIF, or WEBP)', 'paste-invalid-type');
           return;
         }
 
         const maxSize = 5 * 1024 * 1024;
         if (file.size > maxSize) {
-          toast.error('Pasted image size must be less than 5MB');
+          toastErrorOnce('Pasted image size must be less than 5MB', 'paste-too-large');
           return;
         }
 
+        setIsUploading(true);
         try {
           const arrayBuffer = await file.arrayBuffer();
           const uint8Array = new Uint8Array(arrayBuffer);
@@ -288,10 +303,12 @@ export default function ChatRoom({ roomId, nickname }: ChatRoomProps) {
           const previewUrl = URL.createObjectURL(file);
           setImagePreview(previewUrl);
           
-          toast.success('Image pasted! Click send to share.');
+          toastSuccessOnce('Image pasted! Click send to share.', 'image-pasted');
         } catch (error) {
           console.error('Error processing pasted image:', error);
-          toast.error('Failed to process pasted image');
+          toastErrorOnce('Failed to process pasted image', 'paste-process-error');
+        } finally {
+          setIsUploading(false);
         }
         
         return;
@@ -318,6 +335,12 @@ export default function ChatRoom({ roomId, nickname }: ChatRoomProps) {
   };
 
   const handleVideoSend = async (videoBlob: Blob) => {
+    if (!actor) {
+      toastErrorOnce('Connection not ready. Please wait and try again.', 'video-actor-not-ready');
+      return;
+    }
+
+    setIsUploading(true);
     try {
       console.log('Processing video blob:', videoBlob.size, 'bytes, type:', videoBlob.type);
       
@@ -330,7 +353,10 @@ export default function ChatRoom({ roomId, nickname }: ChatRoomProps) {
       setSelectedVideo(blob);
       setShowVideoUploader(false);
       
-      // Auto-send video message with optimistic update
+      // Wait for upload to complete before sending
+      await new Promise(resolve => setTimeout(resolve, 100));
+      
+      // Send video message
       await sendMessage.mutateAsync({ 
         roomId, 
         content: '🎬 Video message', 
@@ -340,7 +366,7 @@ export default function ChatRoom({ roomId, nickname }: ChatRoomProps) {
       
       setSelectedVideo(null);
       setUploadProgress(0);
-      toast.success('Video message sent!');
+      toastSuccessOnce('Video message sent!', 'video-sent');
       
       // Faster scroll after send
       setTimeout(() => {
@@ -349,11 +375,20 @@ export default function ChatRoom({ roomId, nickname }: ChatRoomProps) {
       }, 50);
     } catch (error) {
       console.error('Error sending video:', error);
-      toast.error('Failed to send video message');
+      const sanitizedError = sanitizeChatError(error);
+      toastErrorOnce(sanitizedError, 'video-send-error');
+    } finally {
+      setIsUploading(false);
     }
   };
 
   const handleAudioSend = async (audioBlob: Blob) => {
+    if (!actor) {
+      toastErrorOnce('Connection not ready. Please wait and try again.', 'audio-actor-not-ready');
+      return;
+    }
+
+    setIsUploading(true);
     try {
       console.log('Processing audio blob:', audioBlob.size, 'bytes, type:', audioBlob.type);
       
@@ -366,7 +401,10 @@ export default function ChatRoom({ roomId, nickname }: ChatRoomProps) {
       setSelectedAudio(blob);
       setShowAudioRecorder(false);
       
-      // Auto-send audio message with optimistic update
+      // Wait for upload to complete before sending
+      await new Promise(resolve => setTimeout(resolve, 100));
+      
+      // Send audio message
       await sendMessage.mutateAsync({ 
         roomId, 
         content: '🎵 Audio message', 
@@ -376,7 +414,7 @@ export default function ChatRoom({ roomId, nickname }: ChatRoomProps) {
       
       setSelectedAudio(null);
       setUploadProgress(0);
-      toast.success('Audio message sent!');
+      toastSuccessOnce('Audio message sent!', 'audio-sent');
       
       // Faster scroll after send
       setTimeout(() => {
@@ -385,27 +423,39 @@ export default function ChatRoom({ roomId, nickname }: ChatRoomProps) {
       }, 50);
     } catch (error) {
       console.error('Error sending audio:', error);
-      toast.error('Failed to send audio message');
+      const sanitizedError = sanitizeChatError(error);
+      toastErrorOnce(sanitizedError, 'audio-send-error');
+    } finally {
+      setIsUploading(false);
     }
   };
 
   const handleSendMessage = async () => {
     const trimmedMessage = message.trim();
-    if (!trimmedMessage && !selectedImage && !selectedVideo) return;
+    if (!trimmedMessage && !selectedImage && !selectedVideo && !selectedAudio) return;
 
     if (!actor) {
-      toast.error('Connection not ready. Please wait a moment and try again.');
+      toastErrorOnce('Connection not ready. Please wait a moment and try again.', 'send-actor-not-ready');
       return;
     }
 
     if (roomExists === false) {
-      toast.error('Room does not exist. Please check the room code.');
+      toastErrorOnce('Room does not exist. Please check the room code.', 'send-room-not-exist');
+      return;
+    }
+
+    // Block sending while uploads are in progress
+    if (isUploading || uploadProgress > 0 && uploadProgress < 100) {
+      toastErrorOnce('Please wait for upload to complete', 'send-upload-in-progress');
       return;
     }
 
     const messageToSend = message; // Keep original formatting with newlines
     const imageToSend = selectedImage;
     const videoToSend = selectedVideo;
+    const audioToSend = selectedAudio;
+    const replyToSend = replyingTo;
+    const editToSend = editingMessage;
     
     // Clear input immediately for instant feedback
     setMessage('');
@@ -414,29 +464,32 @@ export default function ChatRoom({ roomId, nickname }: ChatRoomProps) {
     setShowEmojiPicker(false);
     setShowMediaPicker(false);
     setSendError(null);
+    setUnsentPayload(null);
     textareaRef.current?.focus();
 
     try {
-      if (editingMessage) {
+      if (editToSend) {
         // Edit with optimistic update
         await editMessage.mutateAsync({ 
           roomId, 
-          messageId: editingMessage.id, 
+          messageId: editToSend.id, 
           newContent: messageToSend,
           newImage: imageToSend,
-          newVideo: videoToSend
+          newVideo: videoToSend,
+          newAudio: audioToSend
         });
         setEditingMessage(null);
-        toast.success('Message edited');
+        toastSuccessOnce('Message edited', 'message-edited');
       } else {
         // Send with optimistic update - message appears instantly
         await sendMessage.mutateAsync({ 
           roomId, 
-          content: messageToSend || (videoToSend ? '🎬 Video' : '📷 Image'), 
+          content: messageToSend || (videoToSend ? '🎬 Video' : audioToSend ? '🎵 Audio' : '📷 Image'), 
           nickname,
-          replyToId: replyingTo?.id ?? null,
+          replyToId: replyToSend?.id ?? null,
           image: imageToSend,
-          video: videoToSend
+          video: videoToSend,
+          audio: audioToSend
         });
         setReplyingTo(null);
       }
@@ -447,7 +500,17 @@ export default function ChatRoom({ roomId, nickname }: ChatRoomProps) {
         scrollToBottom('smooth');
       }, 50);
     } catch (error) {
-      // Restore message on error
+      // Store the unsent payload for retry
+      const payload: UnsentMessagePayload = {
+        content: messageToSend,
+        replyToId: replyToSend?.id ?? null,
+        image: imageToSend,
+        video: videoToSend,
+        audio: audioToSend,
+      };
+      setUnsentPayload(payload);
+      
+      // Restore all state on error
       setMessage(messageToSend);
       if (imageToSend) {
         setSelectedImage(imageToSend);
@@ -455,10 +518,59 @@ export default function ChatRoom({ roomId, nickname }: ChatRoomProps) {
       if (videoToSend) {
         setSelectedVideo(videoToSend);
       }
-      const errorMessage = error instanceof Error ? error.message : editingMessage ? 'Failed to edit message' : 'Failed to send message';
-      setSendError(errorMessage);
-      toast.error(errorMessage);
-      console.error('Message operation error:', error);
+      if (audioToSend) {
+        setSelectedAudio(audioToSend);
+      }
+      if (replyToSend) {
+        setReplyingTo(replyToSend);
+      }
+      if (editToSend) {
+        setEditingMessage(editToSend);
+      }
+      const sanitizedError = sanitizeChatError(error);
+      setSendError(sanitizedError);
+      // Don't show duplicate toast when inline error is shown
+    }
+  };
+
+  const handleRetrySend = async () => {
+    if (!unsentPayload) return;
+
+    if (!actor) {
+      toastErrorOnce('Connection not ready. Please wait a moment and try again.', 'retry-actor-not-ready');
+      return;
+    }
+
+    setSendError(null);
+    
+    try {
+      await sendMessage.mutateAsync({ 
+        roomId, 
+        content: unsentPayload.content || (unsentPayload.video ? '🎬 Video' : unsentPayload.audio ? '🎵 Audio' : '📷 Image'), 
+        nickname,
+        replyToId: unsentPayload.replyToId,
+        image: unsentPayload.image,
+        video: unsentPayload.video,
+        audio: unsentPayload.audio
+      });
+      
+      // Clear everything on success
+      setUnsentPayload(null);
+      setMessage('');
+      handleRemoveImage();
+      handleRemoveVideo();
+      setReplyingTo(null);
+      
+      toastSuccessOnce('Message sent!', 'retry-success');
+      
+      // Faster scroll after send
+      setTimeout(() => {
+        isUserScrollingRef.current = false;
+        scrollToBottom('smooth');
+      }, 50);
+    } catch (error) {
+      const sanitizedError = sanitizeChatError(error);
+      setSendError(sanitizedError);
     }
   };
 
@@ -488,11 +600,12 @@ export default function ChatRoom({ roomId, nickname }: ChatRoomProps) {
         roomId,
         messageId: messageToDelete.id,
       });
-      toast.success('Message deleted');
+      toastSuccessOnce('Message deleted', 'message-deleted');
       setMessageToDelete(null);
     } catch (error) {
       console.error('Failed to delete message:', error);
-      toast.error('Failed to delete message');
+      const sanitizedError = sanitizeChatError(error);
+      toastErrorOnce(sanitizedError, 'delete-error');
     }
   };
 
@@ -528,7 +641,8 @@ export default function ChatRoom({ roomId, nickname }: ChatRoomProps) {
       }
     } catch (error) {
       console.error('Failed to toggle reaction:', error);
-      toast.error('Failed to update reaction');
+      const sanitizedError = sanitizeChatError(error);
+      toastErrorOnce(sanitizedError, 'reaction-error');
     }
   };
 
@@ -549,18 +663,20 @@ export default function ChatRoom({ roomId, nickname }: ChatRoomProps) {
     textareaRef.current?.focus();
   };
 
-  const handleMediaSelect = (mediaUrl: string) => {
+  const handleMediaSelect = async (mediaUrl: string) => {
+    // Check if it's a blob URL (custom sticker)
     if (mediaUrl.includes('blob:') || mediaUrl.includes('/blobs/')) {
       try {
         const blob = ExternalBlob.fromURL(mediaUrl);
         setSelectedImage(blob);
         setImagePreview(mediaUrl);
-        toast.success('Sticker selected! Click send to share.');
+        toastSuccessOnce('Sticker selected! Click send to share.', 'sticker-selected');
       } catch (error) {
         console.error('Error loading sticker:', error);
-        toast.error('Failed to load sticker');
+        toastErrorOnce('Failed to load sticker', 'sticker-load-error');
       }
     } else {
+      // Regular GIF URL - add to message text
       setMessage((prev) => (prev ? `${prev} ${mediaUrl}` : mediaUrl));
     }
     setShowMediaPicker(false);
@@ -594,6 +710,7 @@ export default function ChatRoom({ roomId, nickname }: ChatRoomProps) {
 
   const isActorLoading = !actor && isActorFetching;
   const showConnectionError = !actor && !isActorFetching;
+  const canSend = !!actor && !isUploading && (uploadProgress === 0 || uploadProgress === 100);
 
   return (
     <div className="flex h-full w-full flex-col">
@@ -627,7 +744,7 @@ export default function ChatRoom({ roomId, nickname }: ChatRoomProps) {
                   <AlertCircle className="h-4 w-4" />
                   <AlertDescription className="flex items-center justify-between">
                     <span>
-                      Failed to load messages. {error instanceof Error ? error.message : 'Please try again.'}
+                      {error instanceof Error ? error.message : sanitizeChatError(error)}
                     </span>
                     <Button
                       variant="outline"
@@ -686,12 +803,32 @@ export default function ChatRoom({ roomId, nickname }: ChatRoomProps) {
       </div>
 
       {/* Input Area - Fixed at bottom with safe area support */}
-      <div className="flex-shrink-0 border-t bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 pb-safe">
+      <div className="shrink-0 border-t bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 pb-safe">
         <div className="container max-w-5xl">
           <div className="p-4">
             {sendError && (
               <Alert variant="destructive" className="mb-3">
-                <AlertDescription>{sendError}</AlertDescription>
+                <AlertDescription className="flex items-center justify-between">
+                  <span>{sendError}</span>
+                  {unsentPayload && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleRetrySend}
+                      disabled={sendMessage.isPending}
+                      className="ml-2 shrink-0"
+                    >
+                      {sendMessage.isPending ? (
+                        <div className="flex items-center gap-2">
+                          <div className="h-3 w-3 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                          Retrying...
+                        </div>
+                      ) : (
+                        'Retry'
+                      )}
+                    </Button>
+                  )}
+                </AlertDescription>
               </Alert>
             )}
 
@@ -708,7 +845,7 @@ export default function ChatRoom({ roomId, nickname }: ChatRoomProps) {
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="h-6 w-6 flex-shrink-0"
+                  className="h-6 w-6 shrink-0"
                   onClick={handleCancelReply}
                 >
                   <X className="h-4 w-4" />
@@ -729,7 +866,7 @@ export default function ChatRoom({ roomId, nickname }: ChatRoomProps) {
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="h-6 w-6 flex-shrink-0"
+                  className="h-6 w-6 shrink-0"
                   onClick={handleCancelEdit}
                 >
                   <X className="h-4 w-4" />
@@ -764,7 +901,7 @@ export default function ChatRoom({ roomId, nickname }: ChatRoomProps) {
                   <Button
                     variant="ghost"
                     size="icon"
-                    className="h-6 w-6 flex-shrink-0"
+                    className="h-6 w-6 shrink-0"
                     onClick={handleRemoveImage}
                   >
                     <X className="h-4 w-4" />
@@ -800,7 +937,7 @@ export default function ChatRoom({ roomId, nickname }: ChatRoomProps) {
                   <Button
                     variant="ghost"
                     size="icon"
-                    className="h-6 w-6 flex-shrink-0"
+                    className="h-6 w-6 shrink-0"
                     onClick={handleRemoveVideo}
                   >
                     <X className="h-4 w-4" />
@@ -825,7 +962,7 @@ export default function ChatRoom({ roomId, nickname }: ChatRoomProps) {
                   }
                   className="pr-40 min-h-[40px] max-h-[200px] resize-none"
                   rows={1}
-                  disabled={sendMessage.isPending || editMessage.isPending || !actor}
+                  disabled={!canSend || sendMessage.isPending || editMessage.isPending}
                 />
                 <div className="absolute right-2 top-2 flex gap-1">
                   <Button
@@ -834,7 +971,7 @@ export default function ChatRoom({ roomId, nickname }: ChatRoomProps) {
                     size="icon"
                     className="h-8 w-8"
                     onClick={() => fileInputRef.current?.click()}
-                    disabled={sendMessage.isPending || editMessage.isPending || !actor}
+                    disabled={!canSend || sendMessage.isPending || editMessage.isPending}
                     title="Upload image"
                   >
                     <Upload className="h-4 w-4" />
@@ -857,7 +994,7 @@ export default function ChatRoom({ roomId, nickname }: ChatRoomProps) {
                       setShowEmojiPicker(false);
                       setShowMediaPicker(false);
                     }}
-                    disabled={sendMessage.isPending || editMessage.isPending || !actor}
+                    disabled={!canSend || sendMessage.isPending || editMessage.isPending}
                     title="Upload video"
                   >
                     <Video className="h-4 w-4" />
@@ -873,7 +1010,7 @@ export default function ChatRoom({ roomId, nickname }: ChatRoomProps) {
                       setShowEmojiPicker(false);
                       setShowMediaPicker(false);
                     }}
-                    disabled={sendMessage.isPending || editMessage.isPending || !actor}
+                    disabled={!canSend || sendMessage.isPending || editMessage.isPending}
                     title="Record audio"
                   >
                     <Mic className="h-4 w-4" />
@@ -889,7 +1026,7 @@ export default function ChatRoom({ roomId, nickname }: ChatRoomProps) {
                       setShowAudioRecorder(false);
                       setShowVideoUploader(false);
                     }}
-                    disabled={sendMessage.isPending || editMessage.isPending || !actor}
+                    disabled={!canSend || sendMessage.isPending || editMessage.isPending}
                   >
                     <Smile className="h-4 w-4" />
                   </Button>
@@ -904,7 +1041,7 @@ export default function ChatRoom({ roomId, nickname }: ChatRoomProps) {
                       setShowAudioRecorder(false);
                       setShowVideoUploader(false);
                     }}
-                    disabled={sendMessage.isPending || editMessage.isPending || !actor}
+                    disabled={!canSend || sendMessage.isPending || editMessage.isPending}
                   >
                     <ImageIcon className="h-4 w-4" />
                   </Button>
@@ -932,9 +1069,9 @@ export default function ChatRoom({ roomId, nickname }: ChatRoomProps) {
               </div>
               <Button
                 onClick={handleSendMessage}
-                disabled={(!message.trim() && !selectedImage && !selectedVideo) || sendMessage.isPending || editMessage.isPending || !actor}
+                disabled={(!message.trim() && !selectedImage && !selectedVideo && !selectedAudio) || !canSend || sendMessage.isPending || editMessage.isPending}
                 size="icon"
-                className="h-10 w-10 flex-shrink-0"
+                className="h-10 w-10 shrink-0"
               >
                 {(sendMessage.isPending || editMessage.isPending) ? (
                   <div className="h-4 w-4 animate-spin rounded-full border-2 border-background border-t-transparent" />

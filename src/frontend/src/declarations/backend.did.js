@@ -96,11 +96,13 @@ export const idlService = IDL.Service({
   'getMessages' : IDL.Func([IDL.Text], [IDL.Vec(MessageView)], ['query']),
   'getUserProfile' : IDL.Func([IDL.Text], [IDL.Opt(UserProfile)], ['query']),
   'isCallerAdmin' : IDL.Func([], [IDL.Bool], ['query']),
+  'pruneExpiredMessages' : IDL.Func([], [], []),
   'removeReaction' : IDL.Func(
       [IDL.Text, IDL.Nat, IDL.Text, IDL.Text],
       [IDL.Bool],
       [],
     ),
+  'roomExists' : IDL.Func([IDL.Text], [IDL.Bool], ['query']),
   'saveCallerUserProfile' : IDL.Func([UserProfile], [], []),
   'sendMessage' : IDL.Func(
       [
@@ -209,11 +211,13 @@ export const idlFactory = ({ IDL }) => {
     'getMessages' : IDL.Func([IDL.Text], [IDL.Vec(MessageView)], ['query']),
     'getUserProfile' : IDL.Func([IDL.Text], [IDL.Opt(UserProfile)], ['query']),
     'isCallerAdmin' : IDL.Func([], [IDL.Bool], ['query']),
+    'pruneExpiredMessages' : IDL.Func([], [], []),
     'removeReaction' : IDL.Func(
         [IDL.Text, IDL.Nat, IDL.Text, IDL.Text],
         [IDL.Bool],
         [],
       ),
+    'roomExists' : IDL.Func([IDL.Text], [IDL.Bool], ['query']),
     'saveCallerUserProfile' : IDL.Func([UserProfile], [], []),
     'sendMessage' : IDL.Func(
         [
