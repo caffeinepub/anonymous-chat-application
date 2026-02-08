@@ -1,54 +1,93 @@
 {
   "kind": "build_request",
-  "title": "Fix regression: sending messages fails on every attempt",
+  "title": "Allow guest users to join/create rooms with only a nickname (no Internet Identity required) and restore messaging",
   "priority": "high",
   "requirements": [
     {
-      "id": "REQ-5",
-      "text": "Identify and fix the root cause of the per-send failure so that sending a message succeeds reliably from the ChatRoom UI. In particular, ensure anonymous users (no Internet Identity) can send messages without backend authorization traps (e.g., remove/relax AccessControl permission checks for core chat operations like `sendMessage`, consistent with the app’s anonymous chat intent).",
-      "target": "both",
+      "id": "REQ-1",
+      "text": "Remove the requirement for Internet Identity / AccessControl \"#user\" permission for core chat operations so that any caller can create rooms, read messages, and send messages using only a nickname.",
+      "target": "backend",
       "source": {
         "messageIds": [
-          "msg-4"
+          "msg-1"
         ],
         "quotes": [
-          "now it shows an error everytime i try to send a message, fix this issue"
+          "anyone with a nickname should be able to join"
         ]
       },
       "acceptanceCriteria": [
-        "From a fresh browser session (not logged into Internet Identity), creating/joining a room and sending a text message succeeds (no inline send error shown in ChatRoom).",
-        "From a fresh anonymous session, sending an image-only message succeeds.",
-        "From a fresh anonymous session, sending an audio-only message succeeds.",
-        "From a fresh anonymous session, sending a video-only message succeeds.",
-        "Backend no longer traps with an authorization/permission error for `sendMessage` when called by an anonymous caller."
+        "An unauthenticated (anonymous) caller can successfully call createRoom(joinCode) and receive the join code back on success.",
+        "An unauthenticated (anonymous) caller can successfully call getMessages(roomId) for an existing room and receive message history (filtered by TTL as currently implemented).",
+        "An unauthenticated (anonymous) caller can successfully call sendMessage(...) for an existing room and receive a non-error response containing the new message id.",
+        "Admin-only operations (e.g., pruneExpiredMessages) remain restricted to admins.",
+        "Room creation still rejects empty/whitespace-only join codes and still rejects duplicate room codes."
       ]
     },
     {
-      "id": "REQ-6",
-      "text": "Improve error diagnostics for message send failures to speed up future debugging: when `useSendMessage` fails, ensure the console log includes IC reject details (reject code/message when present) and the sanitized UI continues to show a stable English message via `sanitizeChatError`.",
-      "target": "frontend",
+      "id": "REQ-2",
+      "text": "Add backend-side validation for guest identity inputs so nickname-based usage is safe and consistent: require a non-empty nickname, trim whitespace, and enforce a reasonable max length consistent with the frontend (20 chars).",
+      "target": "backend",
       "source": {
         "messageIds": [
-          "msg-4"
+          "msg-1"
         ],
         "quotes": [
-          "now it shows an error everytime i try to send a message, fix this issue"
+          "anyone with a nickname should be able to join"
         ]
       },
       "acceptanceCriteria": [
-        "When a send fails, the browser console contains a grouped log entry for the failed operation including context and any available IC reject_code/reject_message.",
-        "User-facing send error text remains sanitized and in English (no raw reject message is displayed in the UI)."
+        "sendMessage rejects empty/whitespace-only nickname with a clear error (trap message) that is sanitized to a user-friendly frontend message.",
+        "Nicknames are trimmed before being stored on messages.",
+        "Nicknames longer than 20 characters are rejected (or truncated consistently—choose one behavior and apply it consistently across message creation and any profile saving endpoints that accept nicknames)."
+      ]
+    },
+    {
+      "id": "REQ-3",
+      "text": "Update frontend room create/join and message send flows to work in guest mode (anonymous actor) without requiring Internet Identity, and ensure errors are surfaced as clear guest-friendly messages instead of generic failures.",
+      "target": "frontend",
+      "source": {
+        "messageIds": [
+          "msg-1"
+        ],
+        "quotes": [
+          "Yes i have tried to create the internet identity and yes im unable to join, anyone with a nickname should be able to join"
+        ]
+      },
+      "acceptanceCriteria": [
+        "From a fresh browser session with no Internet Identity login, the Welcome screen allows entering a nickname + room code and successfully creating a room.",
+        "From a fresh browser session with no Internet Identity login, the Welcome screen allows entering a nickname + join code and successfully joining an existing room.",
+        "After joining as a guest, sending a text message succeeds and the message appears in the chat UI.",
+        "If the backend rejects an operation (e.g., room does not exist, empty nickname), the UI displays an English, user-friendly error message (via existing sanitization) and does not get stuck in a loading state."
+      ]
+    },
+    {
+      "id": "REQ-4",
+      "text": "Fix the \"unable to send or receive messages\" failure mode by aligning frontend expectations with backend behavior (backend traps on failure; frontend should not rely on sentinel return values like messageId === 0n).",
+      "target": "frontend",
+      "source": {
+        "messageIds": [
+          "msg-1"
+        ],
+        "quotes": [
+          "i am unable to send or recieve messages as it shows an error"
+        ]
+      },
+      "acceptanceCriteria": [
+        "Sending a message no longer checks for messageId === 0n as a failure signal if the backend never returns 0n; failures are handled through caught errors and sanitized messaging.",
+        "When sendMessage fails (e.g., room deleted/does not exist), the UI shows 'Unable to send message. Please try again.' (or another appropriate existing sanitized message) and allows retrying.",
+        "Message fetching failures do not permanently block the chat view; retry/backoff behavior remains in place where currently implemented."
       ]
     }
   ],
   "constraints": [
-    "Backend must remain a single-actor Motoko canister with all logic in backend/main.mo.",
-    "Do not edit files under frontend/src/components/ui or any frontend immutablePaths listed in SYSTEM_CONTEXT."
+    "Backend must remain a single Motoko actor in backend/main.mo; only add backend/migration.mo changes if state schema changes require it.",
+    "Do not edit files under frontend/src/hooks/useInternetIdentity.ts(x), frontend/src/hooks/useActor.ts, frontend/src/main.tsx, or frontend/src/components/ui (immutable paths).",
+    "Use English for all user-facing text."
   ],
   "nonGoals": [
-    "Do not add new authentication providers or third-party auth systems (Internet Identity remains the only auth option).",
-    "Do not introduce external databases or additional backend services.",
-    "Do not redesign unrelated chat features (replies, reactions, media picker) beyond what is necessary to restore sending."
+    "Adding third-party authentication providers (only Internet Identity is supported, but this change should not require it).",
+    "Adding real-time/websocket messaging; keep the existing polling/query-based approach.",
+    "Introducing external databases or non-Motoko backend services."
   ],
   "imageRequirements": {
     "required": [],

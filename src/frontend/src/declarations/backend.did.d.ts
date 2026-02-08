@@ -15,6 +15,7 @@ export interface MessageView {
   'id' : bigint,
   'content' : string,
   'nickname' : string,
+  'owner' : string,
   'audioUrl' : [] | [ExternalBlob],
   'imageUrl' : [] | [ExternalBlob],
   'isEdited' : boolean,
@@ -25,7 +26,6 @@ export interface MessageView {
 }
 export interface Reaction { 'userId' : string, 'emoji' : string }
 export type Time = bigint;
-export interface UserProfile { 'nickname' : string }
 export type UserRole = { 'admin' : null } |
   { 'user' : null } |
   { 'guest' : null };
@@ -73,16 +73,13 @@ export interface _SERVICE {
     ],
     boolean
   >,
-  'getCallerUserProfile' : ActorMethod<[], [] | [UserProfile]>,
   'getCallerUserRole' : ActorMethod<[], UserRole>,
   'getMessageTTL' : ActorMethod<[], Time>,
   'getMessages' : ActorMethod<[string], Array<MessageView>>,
-  'getUserProfile' : ActorMethod<[string], [] | [UserProfile]>,
   'isCallerAdmin' : ActorMethod<[], boolean>,
   'pruneExpiredMessages' : ActorMethod<[], undefined>,
   'removeReaction' : ActorMethod<[string, bigint, string, string], boolean>,
   'roomExists' : ActorMethod<[string], boolean>,
-  'saveCallerUserProfile' : ActorMethod<[UserProfile], undefined>,
   'sendMessage' : ActorMethod<
     [
       string,

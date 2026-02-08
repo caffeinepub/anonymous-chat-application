@@ -20,6 +20,26 @@ export function sanitizeChatError(error: unknown): string {
   // Normalize common error patterns to anonymous-friendly messages
   const lowerMessage = errorMessage.toLowerCase();
 
+  // Nickname validation errors
+  if (lowerMessage.includes('nickname cannot be empty')) {
+    return 'Nickname cannot be empty';
+  }
+
+  if (lowerMessage.includes('nickname cannot exceed 20 characters')) {
+    return 'Nickname cannot exceed 20 characters';
+  }
+
+  // Room code validation errors
+  if (lowerMessage.includes('room join code cannot be empty') || 
+      lowerMessage.includes('room code cannot be empty')) {
+    return 'Room code cannot be empty';
+  }
+
+  if (lowerMessage.includes('room join code cannot exceed 30 characters') ||
+      lowerMessage.includes('room code cannot exceed 30 characters')) {
+    return 'Room code cannot exceed 30 characters';
+  }
+
   // Room-specific authorization errors (create, view, join, send operations)
   if (
     (lowerMessage.includes('unauthorized') || lowerMessage.includes('only users can')) &&
@@ -80,7 +100,7 @@ export function sanitizeChatError(error: unknown): string {
   }
 
   // Room errors
-  if (lowerMessage.includes('room does not exist')) {
+  if (lowerMessage.includes('room does not exist') || lowerMessage.includes('cannot send message: room does not exist')) {
     return 'Room does not exist. Please check the room code.';
   }
 
@@ -88,12 +108,8 @@ export function sanitizeChatError(error: unknown): string {
     return 'Room code already exists. Please choose a different code.';
   }
 
-  if (
-    lowerMessage.includes('room join code cannot be empty') ||
-    lowerMessage.includes('cannot be empty') ||
-    lowerMessage.includes('whitespace only')
-  ) {
-    return 'Room code cannot be empty. Please enter a valid code.';
+  if (lowerMessage.includes('whitespace only')) {
+    return 'Input cannot be empty or whitespace only.';
   }
 
   // Upload errors

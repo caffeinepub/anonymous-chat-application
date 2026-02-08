@@ -1,51 +1,76 @@
 {
   "kind": "coverage_report",
   "version": "1.0",
-  "generatedAt": "2026-02-04T10:06:31.377Z",
+  "generatedAt": "2026-02-08T06:13:43.205Z",
   "sources": {
     "buildRequest": true,
     "implementationPlan": true
   },
   "requirements": {
-    "total": 2,
+    "total": 4,
     "implemented": 2,
     "items": [
       {
-        "id": "REQ-5",
-        "summary": "Identify and fix the root cause of the per-send failure so that sending a message succeeds reliably from the ChatRoom UI. In particular, ensure anonymous users (no Internet Identity) can send messages without backend authorization traps (e.g., remove/relax AccessControl permission checks for core chat operations like `sendMessage`, consistent with the app’s anonymous chat intent).",
+        "id": "REQ-1",
+        "summary": "Remove the requirement for Internet Identity / AccessControl \"#user\" permission for core chat operations so that any caller can create rooms, read messages, and send messages using only a nickname.",
+        "status": "unknown",
+        "plannedFiles": [],
+        "matchedFiles": []
+      },
+      {
+        "id": "REQ-2",
+        "summary": "Add backend-side validation for guest identity inputs so nickname-based usage is safe and consistent: require a non-empty nickname, trim whitespace, and enforce a reasonable max length consistent with the frontend (20 chars).",
+        "status": "unknown",
+        "plannedFiles": [],
+        "matchedFiles": []
+      },
+      {
+        "id": "REQ-3",
+        "summary": "Update frontend room create/join and message send flows to work in guest mode (anonymous actor) without requiring Internet Identity, and ensure errors are surfaced as clear guest-friendly messages instead of generic failures.",
         "status": "implemented",
         "plannedFiles": [
-          "frontend/src/hooks/useActor.ts",
+          "frontend/src/components/WelcomeScreen.tsx",
+          "frontend/src/hooks/useQueries.ts",
           "frontend/src/components/ChatRoom.tsx"
         ],
         "matchedFiles": [
+          "frontend/src/components/WelcomeScreen.tsx",
+          "frontend/src/hooks/useQueries.ts",
           "frontend/src/components/ChatRoom.tsx"
         ]
       },
       {
-        "id": "REQ-6",
-        "summary": "Improve error diagnostics for message send failures to speed up future debugging: when `useSendMessage` fails, ensure the console log includes IC reject details (reject code/message when present) and the sanitized UI continues to show a stable English message via `sanitizeChatError`.",
+        "id": "REQ-4",
+        "summary": "Fix the \"unable to send or receive messages\" failure mode by aligning frontend expectations with backend behavior (backend traps on failure; frontend should not rely on sentinel return values like messageId === 0n).",
         "status": "implemented",
         "plannedFiles": [
-          "frontend/src/utils/chatOperationErrors.ts",
-          "frontend/src/hooks/useQueries.ts"
+          "frontend/src/hooks/useQueries.ts",
+          "frontend/src/utils/chatErrorMessages.ts",
+          "frontend/src/components/ChatRoom.tsx"
         ],
         "matchedFiles": [
-          "frontend/src/utils/chatOperationErrors.ts",
-          "frontend/src/hooks/useQueries.ts"
+          "frontend/src/hooks/useQueries.ts",
+          "frontend/src/utils/chatErrorMessages.ts",
+          "frontend/src/components/ChatRoom.tsx"
         ]
       }
     ]
   },
   "changedFiles": [
     "backend/main.mo",
+    "backend/migration.mo",
     "build-request.json",
     "feature_evidence.json",
     "frontend-file-summaries.txt",
     "frontend-implementation-plan.json",
+    "frontend/src/backend.d.ts",
+    "frontend/src/backend.ts",
     "frontend/src/components/ChatRoom.tsx",
+    "frontend/src/components/WelcomeScreen.tsx",
+    "frontend/src/declarations/backend.did.d.ts",
+    "frontend/src/declarations/backend.did.js",
     "frontend/src/hooks/useQueries.ts",
-    "frontend/src/utils/chatOperationErrors.ts",
+    "frontend/src/utils/chatErrorMessages.ts",
     "project_state.json",
     "scratch/component-selection.json",
     "spec.md",

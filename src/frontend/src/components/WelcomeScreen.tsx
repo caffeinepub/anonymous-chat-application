@@ -9,6 +9,7 @@ import { useActor } from '../hooks/useActor';
 import { sanitizeChatError } from '../utils/chatErrorMessages';
 import { retryWithBackoff } from '../utils/retry';
 import { toastErrorOnce, toastSuccessOnce } from '../utils/toastOnce';
+import { createChatOperationError, logChatOperationError } from '../utils/chatOperationErrors';
 
 interface WelcomeScreenProps {
   onJoinRoom: (roomId: string, nickname: string) => void;
@@ -38,8 +39,18 @@ export default function WelcomeScreen({ onJoinRoom }: WelcomeScreenProps) {
       return;
     }
 
+    if (trimmedCode.length > 30) {
+      toastErrorOnce('Room code cannot exceed 30 characters', 'create-code-too-long');
+      return;
+    }
+
     if (!trimmedNickname) {
       toastErrorOnce('Please enter a nickname', 'create-empty-nickname');
+      return;
+    }
+
+    if (trimmedNickname.length > 20) {
+      toastErrorOnce('Nickname cannot exceed 20 characters', 'create-nickname-too-long');
       return;
     }
 
@@ -49,21 +60,31 @@ export default function WelcomeScreen({ onJoinRoom }: WelcomeScreenProps) {
     }
 
     try {
-      // Create room
-      await createRoom.mutateAsync(trimmedCode);
+      // Create room - backend returns the join code on success or traps on error
+      const result = await createRoom.mutateAsync(trimmedCode);
       
       toastSuccessOnce('Room created successfully!', `create-success-${trimmedCode}`);
       
       // Join immediately after successful creation
       onJoinRoom(trimmedCode, trimmedNickname);
     } catch (error) {
-      // Log raw error for diagnostics
-      console.error('[Room Creation] Raw error:', error);
-      
-      // Sanitize and display
+      // Sanitize error for user display
       const sanitizedError = sanitizeChatError(error);
-      console.error('[Room Creation] Sanitized error message:', sanitizedError);
       
+      // Create and log structured error for diagnostics
+      const operationError = createChatOperationError(
+        'createRoom',
+        { 
+          roomCode: trimmedCode,
+          nickname: trimmedNickname,
+          actorReady: isActorReady
+        },
+        sanitizedError,
+        error
+      );
+      logChatOperationError(operationError);
+      
+      // Display anonymized error to user
       toastErrorOnce(sanitizedError, `create-error-${trimmedCode}`);
     }
   };
@@ -79,6 +100,11 @@ export default function WelcomeScreen({ onJoinRoom }: WelcomeScreenProps) {
 
     if (!trimmedNickname) {
       toastErrorOnce('Please enter a nickname', 'join-empty-nickname');
+      return;
+    }
+
+    if (trimmedNickname.length > 20) {
+      toastErrorOnce('Nickname cannot exceed 20 characters', 'join-nickname-too-long');
       return;
     }
 
@@ -109,8 +135,23 @@ export default function WelcomeScreen({ onJoinRoom }: WelcomeScreenProps) {
 
       onJoinRoom(trimmedCode, trimmedNickname);
     } catch (error) {
-      console.error('[Room Join] Error validating room:', error);
+      // Sanitize error for user display
       const sanitizedError = sanitizeChatError(error);
+      
+      // Create and log structured error for diagnostics
+      const operationError = createChatOperationError(
+        'roomExists (join validation)',
+        { 
+          roomCode: trimmedCode,
+          nickname: trimmedNickname,
+          actorReady: isActorReady
+        },
+        sanitizedError,
+        error
+      );
+      logChatOperationError(operationError);
+      
+      // Display anonymized error to user
       toastErrorOnce(sanitizedError, `join-error-${trimmedCode}`);
     } finally {
       setIsJoining(false);
@@ -206,6 +247,7 @@ export default function WelcomeScreen({ onJoinRoom }: WelcomeScreenProps) {
                   value={newRoomCode}
                   onChange={(e) => setNewRoomCode(e.target.value)}
                   onKeyDown={(e) => e.key === 'Enter' && handleCreateRoom()}
+                  maxLength={30}
                   disabled={!isActorReady}
                 />
               </div>

@@ -25,13 +25,13 @@ export const UserRole = IDL.Variant({
   'guest' : IDL.Null,
 });
 export const ExternalBlob = IDL.Vec(IDL.Nat8);
-export const UserProfile = IDL.Record({ 'nickname' : IDL.Text });
 export const Time = IDL.Int;
 export const Reaction = IDL.Record({ 'userId' : IDL.Text, 'emoji' : IDL.Text });
 export const MessageView = IDL.Record({
   'id' : IDL.Nat,
   'content' : IDL.Text,
   'nickname' : IDL.Text,
+  'owner' : IDL.Text,
   'audioUrl' : IDL.Opt(ExternalBlob),
   'imageUrl' : IDL.Opt(ExternalBlob),
   'isEdited' : IDL.Bool,
@@ -90,11 +90,9 @@ export const idlService = IDL.Service({
       [IDL.Bool],
       [],
     ),
-  'getCallerUserProfile' : IDL.Func([], [IDL.Opt(UserProfile)], ['query']),
   'getCallerUserRole' : IDL.Func([], [UserRole], ['query']),
   'getMessageTTL' : IDL.Func([], [Time], ['query']),
   'getMessages' : IDL.Func([IDL.Text], [IDL.Vec(MessageView)], ['query']),
-  'getUserProfile' : IDL.Func([IDL.Text], [IDL.Opt(UserProfile)], ['query']),
   'isCallerAdmin' : IDL.Func([], [IDL.Bool], ['query']),
   'pruneExpiredMessages' : IDL.Func([], [], []),
   'removeReaction' : IDL.Func(
@@ -103,7 +101,6 @@ export const idlService = IDL.Service({
       [],
     ),
   'roomExists' : IDL.Func([IDL.Text], [IDL.Bool], ['query']),
-  'saveCallerUserProfile' : IDL.Func([UserProfile], [], []),
   'sendMessage' : IDL.Func(
       [
         IDL.Text,
@@ -140,13 +137,13 @@ export const idlFactory = ({ IDL }) => {
     'guest' : IDL.Null,
   });
   const ExternalBlob = IDL.Vec(IDL.Nat8);
-  const UserProfile = IDL.Record({ 'nickname' : IDL.Text });
   const Time = IDL.Int;
   const Reaction = IDL.Record({ 'userId' : IDL.Text, 'emoji' : IDL.Text });
   const MessageView = IDL.Record({
     'id' : IDL.Nat,
     'content' : IDL.Text,
     'nickname' : IDL.Text,
+    'owner' : IDL.Text,
     'audioUrl' : IDL.Opt(ExternalBlob),
     'imageUrl' : IDL.Opt(ExternalBlob),
     'isEdited' : IDL.Bool,
@@ -205,11 +202,9 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Bool],
         [],
       ),
-    'getCallerUserProfile' : IDL.Func([], [IDL.Opt(UserProfile)], ['query']),
     'getCallerUserRole' : IDL.Func([], [UserRole], ['query']),
     'getMessageTTL' : IDL.Func([], [Time], ['query']),
     'getMessages' : IDL.Func([IDL.Text], [IDL.Vec(MessageView)], ['query']),
-    'getUserProfile' : IDL.Func([IDL.Text], [IDL.Opt(UserProfile)], ['query']),
     'isCallerAdmin' : IDL.Func([], [IDL.Bool], ['query']),
     'pruneExpiredMessages' : IDL.Func([], [], []),
     'removeReaction' : IDL.Func(
@@ -218,7 +213,6 @@ export const idlFactory = ({ IDL }) => {
         [],
       ),
     'roomExists' : IDL.Func([IDL.Text], [IDL.Bool], ['query']),
-    'saveCallerUserProfile' : IDL.Func([UserProfile], [], []),
     'sendMessage' : IDL.Func(
         [
           IDL.Text,

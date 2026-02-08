@@ -1,55 +1,59 @@
 {
   "kind": "spec_vs_diff_report",
   "version": "1.0",
-  "generatedAt": "2026-02-04T10:06:31.332Z",
-  "summary": "REQ-6 error diagnostics appear to be implemented via a new structured logging utility and updated send-message hook behavior. REQ-5’s frontend support for anonymous media-only sends is partially evidenced (audio/image/video allowed without text), but the backend-side root cause fix (removing/relaxing authorization traps for anonymous sendMessage/createRoom) is not clearly evidenced in the provided backend diff (and createRoom still appears to be guarded by AccessControl in the visible portion).",
+  "generatedAt": "2026-02-08T06:13:43.203Z",
+  "summary": "Most guest-mode and error-handling changes appear implemented (nickname validation, frontend flows, and removal of sentinel failure checks), but the diff evidence is insufficient or conflicting for a couple of key requirements/constraints—particularly admin-only restriction on maintenance operations and several unrequested feature/architecture changes (including edits to immutable paths and media/sticker behavior).",
   "missing_requirements": [
     {
-      "id": "REQ-5",
-      "requirement": "Remove/relax backend authorization/permission checks so anonymous users can reliably create/join a room and send messages (text and media-only) without AccessControl traps, specifically for core operations like sendMessage.",
-      "reason": "The backend diff snippet does not show any change to sendMessage, and the visible portion of createRoom still appears to be gated by AccessControl (\"if (not AccessContr...\") which would conflict with anonymous chat intent. With truncation, the required relaxation cannot be confirmed from the evidence provided.",
+      "id": "REQ-1",
+      "requirement": "Admin-only operations (e.g., pruneExpiredMessages) remain restricted to admins.",
+      "reason": "In the shown backend snippet, `pruneExpiredMessages` is a public shared function with no visible authorization/admin guard. If authorization exists elsewhere, it is not evidenced in the diff summary/truncated content.",
       "evidence": [
-        "backend/main.mo (truncated): shows AccessControl admin check in pruneExpiredMessages and an AccessControl check beginning in createRoom; no sendMessage implementation visible"
+        "backend/main.mo"
       ]
     }
   ],
   "hallucinated_features": [
     {
-      "description": "UI layout change to hide footer during chat and apply new flexbox constraints in App.tsx.",
-      "reason": "Not requested by REQ-5 or REQ-6 (diagnostics + fixing send regression).",
+      "description": "Modified an explicitly immutable file path (`frontend/src/hooks/useActor.ts`).",
+      "reason": "BuildRequest constraints forbid editing `frontend/src/hooks/useActor.ts`, but the diff summary indicates it was modified.",
       "evidence": [
-        "frontend-file-summaries.txt: \"frontend/src/App.tsx\" summary mentions layout changes and hiding footer"
+        "frontend-file-summaries.txt"
       ]
     },
     {
-      "description": "WelcomeScreen behavior change to route immediately into rooms after creation and adjust loading/reset/toast behavior beyond send diagnostics.",
-      "reason": "Not requested; scope is send-message regression and error diagnostics for useSendMessage failures.",
+      "description": "Large media/sticker/GIF-related feature changes (e.g., Tenor API integration and persisting stickers as base64 bytes).",
+      "reason": "Not requested by any REQ; the BuildRequest focuses on guest nickname auth removal and restoring messaging/error handling, not new media integrations or storage format changes.",
       "evidence": [
-        "frontend-file-summaries.txt: \"frontend/src/components/WelcomeScreen.tsx\" summary"
+        "frontend-file-summaries.txt",
+        "frontend/src/components/MediaPicker.tsx"
       ]
     },
     {
-      "description": "Actor initialization change to call _initializeAccessControlWithSecret for anonymous users with non-blocking error handling.",
-      "reason": "Not explicitly requested by REQ-5/REQ-6; could be related, but the requirement specifically calls for relaxing backend permission checks rather than adding initialization behaviors.",
+      "description": "Backend state schema migration removing `userProfiles` from stable state.",
+      "reason": "Not explicitly required by the BuildRequest; guest mode can be supported without necessarily removing stored user profiles. This is a state/schema change beyond the stated requirements (even if technically permissible when needed).",
       "evidence": [
-        "frontend-file-summaries.txt: \"frontend/src/hooks/useActor.ts\" summary"
+        "backend/migration.mo"
       ]
     },
     {
-      "description": "QueryClient configuration and global retry/caching behavior changes in frontend entry point.",
-      "reason": "Not requested; REQ-6 is about logging reject details and keeping UI errors sanitized, not global caching/performance tuning.",
+      "description": "Changes to global styling and mobile viewport fixes (OKLCH theme, iOS/Android viewport adjustments).",
+      "reason": "Not requested by any REQ; unrelated to guest access or messaging error handling.",
       "evidence": [
-        "frontend-file-summaries.txt: \"frontend/src/main.tsx\" summary"
+        "frontend-file-summaries.txt",
+        "frontend/src/index.css"
       ]
     }
   ],
-  "confidence": 0.62,
+  "confidence": 0.63,
   "changed_files": [
     "backend/main.mo",
+    "backend/migration.mo",
     "frontend-file-summaries.txt",
     "frontend/src/components/ChatRoom.tsx",
+    "frontend/src/components/WelcomeScreen.tsx",
     "frontend/src/hooks/useQueries.ts",
-    "frontend/src/utils/chatOperationErrors.ts",
+    "frontend/src/utils/chatErrorMessages.ts",
     "project_state.json"
   ]
 }

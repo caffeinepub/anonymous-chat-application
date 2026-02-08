@@ -106,7 +106,7 @@
 /* Fallback for devices without safe-area support */
 @supports not (padding: env(safe-area-inset-bottom)) {
     .pb-safe {
-        padding-bottom: 0;
+        padding-bottom: 1rem;
     }
 }
 

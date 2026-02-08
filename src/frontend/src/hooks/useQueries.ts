@@ -5,6 +5,7 @@ import { ExternalBlob } from '../backend';
 import { sanitizeChatError } from '../utils/chatErrorMessages';
 import { logChatOperationError, createChatOperationError } from '../utils/chatOperationErrors';
 import { retryWithBackoff } from '../utils/retry';
+import { toastErrorOnce } from '../utils/toastOnce';
 
 // Generate a unique user ID for the session (stored in localStorage)
 function getUserId(): string {
@@ -28,12 +29,13 @@ export function useCreateRoom() {
       if (!trimmedCode) {
         throw new Error('Room code cannot be empty');
       }
-      try {
-        return await actor.createRoom(trimmedCode);
-      } catch (err) {
-        // Preserve the original error for proper sanitization
-        throw err;
+      if (trimmedCode.length > 30) {
+        throw new Error('Room code cannot exceed 30 characters');
       }
+      
+      // Backend will trap on error, so we just await the result
+      const result = await actor.createRoom(trimmedCode);
+      return result;
     },
     onError: (error) => {
       console.error('[useCreateRoom] Mutation failed:', error);
@@ -54,7 +56,22 @@ export function useRoomExists(roomId: string | null) {
         const exists = await actor.roomExists(trimmedRoomId);
         return exists;
       } catch (error) {
-        console.error('Room existence check failed:', error);
+        // Sanitize error for user display
+        const sanitizedError = sanitizeChatError(error);
+        
+        // Create and log structured error for diagnostics
+        const operationError = createChatOperationError(
+          'roomExists (query)',
+          { 
+            roomId: trimmedRoomId,
+            actorAvailable: !!actor
+          },
+          sanitizedError,
+          error
+        );
+        logChatOperationError(operationError);
+        
+        // Return false to indicate room doesn't exist (safe fallback)
         return false;
       }
     },
@@ -106,7 +123,10 @@ export function useSendMessage() {
         throw new Error('Room ID is required');
       }
       if (!trimmedNickname) {
-        throw new Error('Nickname is required');
+        throw new Error('Nickname cannot be empty');
+      }
+      if (trimmedNickname.length > 20) {
+        throw new Error('Nickname cannot exceed 20 characters');
       }
       if (!content && !image && !video && !audio) {
         throw new Error('Message content or media is required');
@@ -136,6 +156,7 @@ export function useSendMessage() {
           }
         );
         
+        // Backend returns the message ID on success, or traps on failure
         return { messageId, roomId: trimmedRoomId, content, nickname: trimmedNickname, replyToId, image, video, audio };
       } catch (err) {
         // Create structured error with both sanitized message and raw error
@@ -164,6 +185,7 @@ export function useSendMessage() {
     // Optimistic update - add message to UI immediately
     onMutate: async ({ roomId, content, nickname, replyToId, image, video, audio }) => {
       const trimmedRoomId = roomId.trim();
+      const userId = getUserId();
       
       // Cancel any outgoing refetches to avoid overwriting optimistic update
       await queryClient.cancelQueries({ queryKey: ['messages', trimmedRoomId] });
@@ -171,167 +193,56 @@ export function useSendMessage() {
       // Snapshot the previous value
       const previousMessages = queryClient.getQueryData<MessageView[]>(['messages', trimmedRoomId]);
 
-      // Generate temporary optimistic ID
+      // Optimistically update to the new value
       const optimisticId = `optimistic_${Date.now()}_${Math.random()}`;
-      
-      // Create optimistic message - convert null to undefined for TypeScript
       const optimisticMessage: OptimisticMessage = {
         id: BigInt(Date.now()), // Temporary ID
         content: content || (video ? '🎬 Video' : audio ? '🎵 Audio' : '📷 Image'),
-        nickname,
         timestamp: BigInt(Date.now() * 1_000_000), // Convert to nanoseconds
+        nickname: nickname.trim(),
         replyToId: replyToId ?? undefined,
         imageUrl: image ?? undefined,
         videoUrl: video ?? undefined,
         audioUrl: audio ?? undefined,
         isEdited: false,
         reactions: [],
+        owner: userId,
         isOptimistic: true,
         optimisticId,
       };
 
-      // Optimistically update the cache
       queryClient.setQueryData<MessageView[]>(
         ['messages', trimmedRoomId],
-        (old = []) => [...old, optimisticMessage as MessageView]
+        (old = []) => [...old, optimisticMessage]
       );
 
-      // Return context with previous messages for rollback
-      return { previousMessages, optimisticId, trimmedRoomId };
+      // Return context with previous messages and optimistic ID
+      return { previousMessages, optimisticId };
     },
-    // On error, rollback to previous state
+    // On error, roll back to the previous value
     onError: (err, variables, context) => {
-      if (context?.previousMessages && context?.trimmedRoomId) {
-        queryClient.setQueryData(['messages', context.trimmedRoomId], context.previousMessages);
+      const trimmedRoomId = variables.roomId.trim();
+      
+      if (context?.previousMessages !== undefined) {
+        // Restore previous messages if we have them
+        queryClient.setQueryData(['messages', trimmedRoomId], context.previousMessages);
+      } else {
+        // If no previous messages, remove the optimistic message by filtering
+        queryClient.setQueryData<MessageView[]>(
+          ['messages', trimmedRoomId],
+          (old = []) => old.filter((msg: any) => msg.optimisticId !== context?.optimisticId)
+        );
       }
-      // Error is already logged in mutationFn with structured logging
     },
-    // On success, replace optimistic message with real one
-    onSuccess: (data, variables, context) => {
-      // Invalidate to fetch the real message from backend
-      const trimmedRoomId = context?.trimmedRoomId || variables.roomId.trim();
+    // Always refetch after error or success to ensure consistency
+    onSettled: (data, error, variables) => {
+      const trimmedRoomId = variables.roomId.trim();
       queryClient.invalidateQueries({ queryKey: ['messages', trimmedRoomId] });
     },
   });
 }
 
-// Get messages for a room with optimized polling
-export function useMessages(roomId: string | null, enabled: boolean = true) {
-  const { actor, isFetching: isActorFetching } = useActor();
-
-  return useQuery<MessageView[]>({
-    queryKey: ['messages', roomId],
-    queryFn: async () => {
-      if (!actor || !roomId) return [];
-      const trimmedRoomId = roomId.trim();
-      try {
-        const messages = await actor.getMessages(trimmedRoomId);
-        return messages;
-      } catch (error) {
-        console.error('Failed to fetch messages:', error);
-        
-        // Check if it's a room-not-found error
-        const errorMessage = error instanceof Error ? error.message : String(error);
-        if (errorMessage.toLowerCase().includes('room does not exist')) {
-          // Throw to surface the error to the UI
-          throw new Error(sanitizeChatError(error));
-        }
-        
-        // For network/transient errors, also throw to surface them
-        if (error instanceof Error && (
-          errorMessage.includes('fetch') || 
-          errorMessage.includes('network') ||
-          errorMessage.includes('Failed to')
-        )) {
-          throw error;
-        }
-        
-        // For other errors, return empty array as fallback
-        return [];
-      }
-    },
-    enabled: !!actor && !isActorFetching && !!roomId && enabled,
-    // Optimized polling for real-time updates
-    refetchInterval: (query) => {
-      if (query.state.status === 'error') {
-        return false;
-      }
-      // Faster polling for better real-time feel
-      return 1500; // Poll every 1.5 seconds
-    },
-    refetchIntervalInBackground: true,
-    staleTime: 0, // Always consider data stale for fresh fetches
-    // Reduce retry attempts for faster error feedback
-    retry: (failureCount, error) => {
-      if (error instanceof Error && error.message.includes('Actor not initialized')) {
-        return false;
-      }
-      // Don't retry room-not-found errors
-      if (error instanceof Error && error.message.toLowerCase().includes('room does not exist')) {
-        return false;
-      }
-      return failureCount < 2; // Only retry twice
-    },
-    retryDelay: (attemptIndex) => Math.min(500 * Math.pow(2, attemptIndex), 3000),
-  });
-}
-
-// Delete a message with optimistic updates
-export function useDeleteMessage() {
-  const { actor } = useActor();
-  const queryClient = useQueryClient();
-
-  return useMutation({
-    mutationFn: async ({ roomId, messageId }: { roomId: string; messageId: bigint }) => {
-      if (!actor) throw new Error('Connection not ready. Please wait and try again.');
-      const trimmedRoomId = roomId.trim();
-      const userId = getUserId();
-      try {
-        const result = await actor.deleteMessage(trimmedRoomId, messageId, userId);
-        if (!result) {
-          throw new Error('Failed to delete message');
-        }
-        return { result, roomId: trimmedRoomId, messageId };
-      } catch (err) {
-        const sanitized = sanitizeChatError(err);
-        const operationError = createChatOperationError(
-          'deleteMessage',
-          { roomId: trimmedRoomId, messageId: messageId.toString() },
-          sanitized,
-          err
-        );
-        logChatOperationError(operationError);
-        throw new Error(sanitized);
-      }
-    },
-    // Optimistic update - remove message from UI immediately
-    onMutate: async ({ roomId, messageId }) => {
-      const trimmedRoomId = roomId.trim();
-      await queryClient.cancelQueries({ queryKey: ['messages', trimmedRoomId] });
-      
-      const previousMessages = queryClient.getQueryData<MessageView[]>(['messages', trimmedRoomId]);
-      
-      // Optimistically remove the message
-      queryClient.setQueryData<MessageView[]>(
-        ['messages', trimmedRoomId],
-        (old = []) => old.filter(msg => msg.id !== messageId)
-      );
-      
-      return { previousMessages, trimmedRoomId };
-    },
-    onError: (err, variables, context) => {
-      if (context?.previousMessages && context?.trimmedRoomId) {
-        queryClient.setQueryData(['messages', context.trimmedRoomId], context.previousMessages);
-      }
-      // Error is already logged in mutationFn
-    },
-    onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ['messages', data.roomId] });
-    },
-  });
-}
-
-// Edit a message with optimistic updates
+// Edit a message
 export function useEditMessage() {
   const { actor } = useActor();
   const queryClient = useQueryClient();
@@ -352,28 +263,42 @@ export function useEditMessage() {
       newVideo?: ExternalBlob | null;
       newAudio?: ExternalBlob | null;
     }) => {
-      if (!actor) throw new Error('Connection not ready. Please wait and try again.');
-      const trimmedRoomId = roomId.trim();
+      if (!actor) {
+        throw new Error('Connection not ready. Please wait and try again.');
+      }
+      
       const userId = getUserId();
+      
       try {
-        const result = await actor.editMessage(
-          trimmedRoomId, 
-          messageId,
-          userId,
-          newContent, 
-          newImage ?? null,
-          newVideo ?? null,
-          newAudio ?? null
+        const success = await retryWithBackoff(
+          async () => {
+            return await actor.editMessage(
+              roomId, 
+              messageId, 
+              userId, 
+              newContent,
+              newImage ?? null,
+              newVideo ?? null,
+              newAudio ?? null
+            );
+          },
+          {
+            maxAttempts: 2,
+            initialDelayMs: 200,
+            maxDelayMs: 1000,
+          }
         );
-        if (!result) {
+        
+        if (!success) {
           throw new Error('Failed to edit message');
         }
-        return { result, roomId: trimmedRoomId, messageId, newContent, newImage, newVideo, newAudio };
+        
+        return { roomId, messageId, newContent, newImage, newVideo, newAudio };
       } catch (err) {
         const sanitized = sanitizeChatError(err);
         const operationError = createChatOperationError(
           'editMessage',
-          { roomId: trimmedRoomId, messageId: messageId.toString() },
+          { roomId, messageId: messageId.toString() },
           sanitized,
           err
         );
@@ -381,16 +306,12 @@ export function useEditMessage() {
         throw new Error(sanitized);
       }
     },
-    // Optimistic update - update message in UI immediately
     onMutate: async ({ roomId, messageId, newContent, newImage, newVideo, newAudio }) => {
-      const trimmedRoomId = roomId.trim();
-      await queryClient.cancelQueries({ queryKey: ['messages', trimmedRoomId] });
-      
-      const previousMessages = queryClient.getQueryData<MessageView[]>(['messages', trimmedRoomId]);
-      
-      // Optimistically update the message
+      await queryClient.cancelQueries({ queryKey: ['messages', roomId] });
+      const previousMessages = queryClient.getQueryData<MessageView[]>(['messages', roomId]);
+
       queryClient.setQueryData<MessageView[]>(
-        ['messages', trimmedRoomId],
+        ['messages', roomId],
         (old = []) => old.map(msg => 
           msg.id === messageId 
             ? { 
@@ -399,27 +320,90 @@ export function useEditMessage() {
                 isEdited: true,
                 imageUrl: newImage ?? msg.imageUrl,
                 videoUrl: newVideo ?? msg.videoUrl,
-                audioUrl: newAudio ?? msg.audioUrl,
+                audioUrl: newAudio ?? msg.audioUrl
               } 
             : msg
         )
       );
-      
-      return { previousMessages, trimmedRoomId };
+
+      return { previousMessages };
     },
     onError: (err, variables, context) => {
-      if (context?.previousMessages && context?.trimmedRoomId) {
-        queryClient.setQueryData(['messages', context.trimmedRoomId], context.previousMessages);
+      if (context?.previousMessages) {
+        queryClient.setQueryData(['messages', variables.roomId], context.previousMessages);
       }
-      // Error is already logged in mutationFn
     },
-    onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ['messages', data.roomId] });
+    onSettled: (data, error, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['messages', variables.roomId] });
     },
   });
 }
 
-// Add a reaction with optimistic updates
+// Delete a message
+export function useDeleteMessage() {
+  const { actor } = useActor();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ roomId, messageId }: { roomId: string; messageId: bigint }) => {
+      if (!actor) {
+        throw new Error('Connection not ready. Please wait and try again.');
+      }
+      
+      const userId = getUserId();
+      
+      try {
+        const success = await retryWithBackoff(
+          async () => {
+            return await actor.deleteMessage(roomId, messageId, userId);
+          },
+          {
+            maxAttempts: 2,
+            initialDelayMs: 200,
+            maxDelayMs: 1000,
+          }
+        );
+        
+        if (!success) {
+          throw new Error('Failed to delete message');
+        }
+        
+        return { roomId, messageId };
+      } catch (err) {
+        const sanitized = sanitizeChatError(err);
+        const operationError = createChatOperationError(
+          'deleteMessage',
+          { roomId, messageId: messageId.toString() },
+          sanitized,
+          err
+        );
+        logChatOperationError(operationError);
+        throw new Error(sanitized);
+      }
+    },
+    onMutate: async ({ roomId, messageId }) => {
+      await queryClient.cancelQueries({ queryKey: ['messages', roomId] });
+      const previousMessages = queryClient.getQueryData<MessageView[]>(['messages', roomId]);
+
+      queryClient.setQueryData<MessageView[]>(
+        ['messages', roomId],
+        (old = []) => old.filter(msg => msg.id !== messageId)
+      );
+
+      return { previousMessages };
+    },
+    onError: (err, variables, context) => {
+      if (context?.previousMessages) {
+        queryClient.setQueryData(['messages', variables.roomId], context.previousMessages);
+      }
+    },
+    onSettled: (data, error, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['messages', variables.roomId] });
+    },
+  });
+}
+
+// Add a reaction to a message
 export function useAddReaction() {
   const { actor } = useActor();
   const queryClient = useQueryClient();
@@ -428,69 +412,61 @@ export function useAddReaction() {
     mutationFn: async ({ 
       roomId, 
       messageId, 
-      userId, 
       emoji 
     }: { 
       roomId: string; 
       messageId: bigint; 
-      userId: string; 
       emoji: string;
     }) => {
-      if (!actor) throw new Error('Connection not ready. Please wait and try again.');
-      const trimmedRoomId = roomId.trim();
+      if (!actor) {
+        throw new Error('Connection not ready. Please wait and try again.');
+      }
+      
+      const userId = getUserId();
+      
       try {
-        const result = await actor.addReaction(trimmedRoomId, messageId, userId, emoji);
-        if (!result) {
+        const success = await actor.addReaction(roomId, messageId, userId, emoji);
+        
+        if (!success) {
           throw new Error('Failed to add reaction');
         }
-        return { result, roomId: trimmedRoomId, messageId, userId, emoji };
+        
+        return { roomId, messageId, userId, emoji };
       } catch (err) {
         const sanitized = sanitizeChatError(err);
-        const operationError = createChatOperationError(
-          'addReaction',
-          { roomId: trimmedRoomId, messageId: messageId.toString(), emoji },
-          sanitized,
-          err
-        );
-        logChatOperationError(operationError);
         throw new Error(sanitized);
       }
     },
-    // Optimistic update - add reaction immediately
-    onMutate: async ({ roomId, messageId, userId, emoji }) => {
-      const trimmedRoomId = roomId.trim();
-      await queryClient.cancelQueries({ queryKey: ['messages', trimmedRoomId] });
-      
-      const previousMessages = queryClient.getQueryData<MessageView[]>(['messages', trimmedRoomId]);
-      
-      // Optimistically add the reaction
+    onMutate: async ({ roomId, messageId, emoji }) => {
+      const userId = getUserId();
+      await queryClient.cancelQueries({ queryKey: ['messages', roomId] });
+      const previousMessages = queryClient.getQueryData<MessageView[]>(['messages', roomId]);
+
       queryClient.setQueryData<MessageView[]>(
-        ['messages', trimmedRoomId],
-        (old = []) => old.map(msg => 
-          msg.id === messageId 
-            ? { 
-                ...msg, 
-                reactions: [...msg.reactions, { userId, emoji }]
-              } 
-            : msg
-        )
+        ['messages', roomId],
+        (old = []) => old.map(msg => {
+          if (msg.id === messageId) {
+            const newReaction: Reaction = { userId, emoji };
+            return { ...msg, reactions: [...msg.reactions, newReaction] };
+          }
+          return msg;
+        })
       );
-      
-      return { previousMessages, trimmedRoomId };
+
+      return { previousMessages };
     },
     onError: (err, variables, context) => {
-      if (context?.previousMessages && context?.trimmedRoomId) {
-        queryClient.setQueryData(['messages', context.trimmedRoomId], context.previousMessages);
+      if (context?.previousMessages) {
+        queryClient.setQueryData(['messages', variables.roomId], context.previousMessages);
       }
-      // Error is already logged in mutationFn
     },
-    onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ['messages', data.roomId] });
+    onSettled: (data, error, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['messages', variables.roomId] });
     },
   });
 }
 
-// Remove a reaction with optimistic updates
+// Remove a reaction from a message
 export function useRemoveReaction() {
   const { actor } = useActor();
   const queryClient = useQueryClient();
@@ -499,84 +475,104 @@ export function useRemoveReaction() {
     mutationFn: async ({ 
       roomId, 
       messageId, 
-      userId, 
       emoji 
     }: { 
       roomId: string; 
       messageId: bigint; 
-      userId: string; 
       emoji: string;
     }) => {
-      if (!actor) throw new Error('Connection not ready. Please wait and try again.');
-      const trimmedRoomId = roomId.trim();
+      if (!actor) {
+        throw new Error('Connection not ready. Please wait and try again.');
+      }
+      
+      const userId = getUserId();
+      
       try {
-        const result = await actor.removeReaction(trimmedRoomId, messageId, userId, emoji);
-        if (!result) {
+        const success = await actor.removeReaction(roomId, messageId, userId, emoji);
+        
+        if (!success) {
           throw new Error('Failed to remove reaction');
         }
-        return { result, roomId: trimmedRoomId, messageId, userId, emoji };
+        
+        return { roomId, messageId, userId, emoji };
       } catch (err) {
         const sanitized = sanitizeChatError(err);
-        const operationError = createChatOperationError(
-          'removeReaction',
-          { roomId: trimmedRoomId, messageId: messageId.toString(), emoji },
-          sanitized,
-          err
-        );
-        logChatOperationError(operationError);
         throw new Error(sanitized);
       }
     },
-    // Optimistic update - remove reaction immediately
-    onMutate: async ({ roomId, messageId, userId, emoji }) => {
-      const trimmedRoomId = roomId.trim();
-      await queryClient.cancelQueries({ queryKey: ['messages', trimmedRoomId] });
-      
-      const previousMessages = queryClient.getQueryData<MessageView[]>(['messages', trimmedRoomId]);
-      
-      // Optimistically remove the reaction
+    onMutate: async ({ roomId, messageId, emoji }) => {
+      const userId = getUserId();
+      await queryClient.cancelQueries({ queryKey: ['messages', roomId] });
+      const previousMessages = queryClient.getQueryData<MessageView[]>(['messages', roomId]);
+
       queryClient.setQueryData<MessageView[]>(
-        ['messages', trimmedRoomId],
-        (old = []) => old.map(msg => 
-          msg.id === messageId 
-            ? { 
-                ...msg, 
-                reactions: msg.reactions.filter(
-                  r => !(r.userId === userId && r.emoji === emoji)
-                )
-              } 
-            : msg
-        )
+        ['messages', roomId],
+        (old = []) => old.map(msg => {
+          if (msg.id === messageId) {
+            return { 
+              ...msg, 
+              reactions: msg.reactions.filter(r => !(r.userId === userId && r.emoji === emoji))
+            };
+          }
+          return msg;
+        })
       );
-      
-      return { previousMessages, trimmedRoomId };
+
+      return { previousMessages };
     },
     onError: (err, variables, context) => {
-      if (context?.previousMessages && context?.trimmedRoomId) {
-        queryClient.setQueryData(['messages', context.trimmedRoomId], context.previousMessages);
+      if (context?.previousMessages) {
+        queryClient.setQueryData(['messages', variables.roomId], context.previousMessages);
       }
-      // Error is already logged in mutationFn
     },
-    onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ['messages', data.roomId] });
+    onSettled: (data, error, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['messages', variables.roomId] });
     },
   });
 }
 
-// Get message TTL from backend
+// Fetch messages for a room with polling
+export function useMessages(roomId: string | null) {
+  const { actor, isFetching: isActorFetching } = useActor();
+
+  return useQuery<MessageView[]>({
+    queryKey: ['messages', roomId],
+    queryFn: async () => {
+      if (!actor || !roomId) return [];
+      
+      try {
+        const messages = await actor.getMessages(roomId);
+        return messages;
+      } catch (error) {
+        console.error('[useMessages] Query failed:', error);
+        // Don't throw - return empty array to keep UI functional
+        return [];
+      }
+    },
+    enabled: !!actor && !isActorFetching && !!roomId,
+    refetchInterval: 2000, // Poll every 2 seconds
+    refetchIntervalInBackground: false,
+    staleTime: 1000,
+    retry: (failureCount, error) => {
+      // Retry transient errors, but not permanent ones
+      if (failureCount >= 3) return false;
+      return true;
+    },
+  });
+}
+
+// Get message TTL
 export function useMessageTTL() {
   const { actor, isFetching: isActorFetching } = useActor();
 
   return useQuery<bigint>({
     queryKey: ['messageTTL'],
     queryFn: async () => {
-      if (!actor) {
-        // Return default 24 hours as fallback while actor loads
-        return 86_400_000_000_000n;
-      }
-      return await actor.getMessageTTL();
+      if (!actor) throw new Error('Actor not available');
+      return actor.getMessageTTL();
     },
     enabled: !!actor && !isActorFetching,
     staleTime: Infinity, // TTL doesn't change
+    retry: 1,
   });
 }

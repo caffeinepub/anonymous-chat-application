@@ -19,6 +19,7 @@ export interface MessageView {
     id: bigint;
     content: string;
     nickname: string;
+    owner: string;
     audioUrl?: ExternalBlob;
     imageUrl?: ExternalBlob;
     isEdited: boolean;
@@ -26,9 +27,6 @@ export interface MessageView {
     replyToId?: bigint;
     videoUrl?: ExternalBlob;
     reactions: Array<Reaction>;
-}
-export interface UserProfile {
-    nickname: string;
 }
 export interface Reaction {
     userId: string;
@@ -45,15 +43,12 @@ export interface backendInterface {
     createRoom(joinCode: string): Promise<string>;
     deleteMessage(roomId: string, messageId: bigint, userId: string): Promise<boolean>;
     editMessage(roomId: string, messageId: bigint, userId: string, newContent: string, newImage: ExternalBlob | null, newVideo: ExternalBlob | null, newAudio: ExternalBlob | null): Promise<boolean>;
-    getCallerUserProfile(): Promise<UserProfile | null>;
     getCallerUserRole(): Promise<UserRole>;
     getMessageTTL(): Promise<Time>;
     getMessages(roomId: string): Promise<Array<MessageView>>;
-    getUserProfile(user: string): Promise<UserProfile | null>;
     isCallerAdmin(): Promise<boolean>;
     pruneExpiredMessages(): Promise<void>;
     removeReaction(roomId: string, messageId: bigint, userId: string, emoji: string): Promise<boolean>;
     roomExists(roomId: string): Promise<boolean>;
-    saveCallerUserProfile(profile: UserProfile): Promise<void>;
     sendMessage(roomId: string, content: string, nickname: string, userId: string, replyToId: bigint | null, image: ExternalBlob | null, video: ExternalBlob | null, audio: ExternalBlob | null): Promise<bigint>;
 }

@@ -1,11 +1,12 @@
 # Specification
 
 ## Summary
-**Goal:** Fix the regression causing message sends to fail from the ChatRoom UI, including for anonymous users, and improve diagnostics for any future send failures.
+**Goal:** Let users create/join chat rooms and send/receive messages as guests using only a nickname (no Internet Identity required), with clear error handling.
 
 **Planned changes:**
-- Identify and fix the root cause of per-send failures so `sendMessage` works reliably from ChatRoom, including when the caller is anonymous (no Internet Identity).
-- Adjust backend authorization/access control so core chat send operations do not trap for anonymous callers, consistent with anonymous chat behavior.
-- Enhance frontend `useSendMessage` failure logging to include IC reject details (reject code/message when available) while keeping the UI error message sanitized and stable in English via `sanitizeChatError`.
+- Backend: remove Internet Identity / `AccessControl "#user"` requirement for core chat operations (create room, read messages, send messages) while keeping admin-only operations restricted.
+- Backend: validate guest nickname inputs (trim whitespace, require non-empty, enforce max length of 20 characters) and return clear, user-friendly errors for invalid input.
+- Frontend: update room create/join and message send flows to work with an anonymous actor (guest mode) and surface backend errors as clear English messages without getting stuck loading.
+- Frontend: fix messaging failure handling by relying on caught backend errors (traps) rather than sentinel return values (e.g., no `messageId === 0n` checks), and ensure message fetch/send failures remain recoverable.
 
-**User-visible outcome:** From a fresh anonymous browser session, users can create/join a room and successfully send text, image-only, audio-only, and video-only messages without seeing a send error; if a send does fail, the UI shows a clean English error while the console includes detailed reject diagnostics.
+**User-visible outcome:** From a fresh session without logging in, a user can enter a nickname and room code to create or join a room, then send and receive messages successfully with understandable error messages when something goes wrong.

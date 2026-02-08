@@ -1,48 +1,58 @@
 {
   "kind": "implementation_plan",
   "version": "1.0",
-  "title": "Fix anonymous send regression and improve send failure diagnostics",
+  "title": "Guest-mode rooms and reliable messaging error handling (frontend)",
   "requirements": [
     {
-      "id": "REQ-5",
-      "summary": "Restore reliable message sending from ChatRoom for anonymous sessions, including text and media-only messages, by ensuring anonymous actor initialization and fixing UI logic that blocks media-only sends.",
+      "id": "REQ-3",
+      "summary": "Update room create/join and chat send flows to work for guest (anonymous) usage with nickname-only, surfacing user-friendly errors without requiring Internet Identity.",
       "acceptanceCriteria": [
-        "From a fresh browser session (not logged into Internet Identity), creating/joining a room and sending a text message succeeds (no inline send error shown in ChatRoom).",
-        "From a fresh anonymous session, sending an image-only message succeeds.",
-        "From a fresh anonymous session, sending an audio-only message succeeds.",
-        "From a fresh anonymous session, sending a video-only message succeeds.",
-        "Backend no longer traps with an authorization/permission error for `sendMessage` when called by an anonymous caller."
+        "From a fresh browser session with no Internet Identity login, the Welcome screen allows entering a nickname + room code and successfully creating a room.",
+        "From a fresh browser session with no Internet Identity login, the Welcome screen allows entering a nickname + join code and successfully joining an existing room.",
+        "After joining as a guest, sending a text message succeeds and the message appears in the chat UI.",
+        "If the backend rejects an operation (e.g., room does not exist, empty nickname), the UI displays an English, user-friendly error message (via existing sanitization) and does not get stuck in a loading state."
       ],
       "file_operations": [
         {
-          "path": "frontend/src/hooks/useActor.ts",
+          "path": "frontend/src/components/WelcomeScreen.tsx",
           "operation": "modify",
-          "description": "Ensure the backend actor is fully initialized for anonymous sessions as well (best-effort call to access-control initialization using the existing secret parameter logic), so core chat operations like sendMessage do not fail due to missing initialization in fresh anonymous browser sessions."
-        },
-        {
-          "path": "frontend/src/components/ChatRoom.tsx",
-          "operation": "modify",
-          "description": "Fix ChatRoom send gating/validation so media-only messages are allowed from the main composer: include selectedAudio in the early-return validation, include selectedAudio in the send button disabled logic, and ensure selectedAudio is considered when determining whether the user can send without typing text."
-        }
-      ]
-    },
-    {
-      "id": "REQ-6",
-      "summary": "Improve frontend diagnostics for send failures by logging IC reject details (when present) while keeping UI errors sanitized via sanitizeChatError.",
-      "acceptanceCriteria": [
-        "When a send fails, the browser console contains a grouped log entry for the failed operation including context and any available IC reject_code/reject_message.",
-        "User-facing send error text remains sanitized and in English (no raw reject message is displayed in the UI)."
-      ],
-      "file_operations": [
-        {
-          "path": "frontend/src/utils/chatOperationErrors.ts",
-          "operation": "modify",
-          "description": "Enhance IC reject detail extraction to handle additional common error shapes (including nested/cause-style fields) so grouped console logs reliably include reject code/message when provided by the agent/replica, without changing the sanitized message shown to users."
+          "description": "Ensure create/join flows are fully guest-friendly: validate nickname (trim, non-empty, max 20), avoid any UI assumptions that login is required, and rely on caught/trapped backend errors sanitized via sanitizeChatError for user-facing messaging."
         },
         {
           "path": "frontend/src/hooks/useQueries.ts",
           "operation": "modify",
-          "description": "Augment useSendMessage failure logging context to include clearer per-send metadata (e.g., content vs media-only flags) and ensure the raw error passed into createChatOperationError preserves IC reject fields for diagnostics, while continuing to throw only the sanitized English message to the UI via sanitizeChatError."
+          "description": "Align createRoom and sendMessage mutations with guest-mode behavior: keep nickname trimming/validation consistent (max 20), and ensure errors are surfaced by throwing (to be sanitized) rather than interpreting backend return-value sentinels."
+        },
+        {
+          "path": "frontend/src/components/ChatRoom.tsx",
+          "operation": "modify",
+          "description": "Add/ensure pre-send guest validation for nickname (trim, non-empty, max 20) before attempting send/edit, and keep failure handling retryable with sanitized English messaging (inline/toast) without leaving the UI in a stuck state."
+        }
+      ]
+    },
+    {
+      "id": "REQ-4",
+      "summary": "Fix messaging failures by handling backend traps via caught errors (no sentinel return-value checks) and keeping message fetching resilient with retry/polling behavior.",
+      "acceptanceCriteria": [
+        "Sending a message no longer checks for messageId === 0n as a failure signal if the backend never returns 0n; failures are handled through caught errors and sanitized messaging.",
+        "When sendMessage fails (e.g., room deleted/does not exist), the UI shows 'Unable to send message. Please try again.' (or another appropriate existing sanitized message) and allows retrying.",
+        "Message fetching failures do not permanently block the chat view; retry/backoff behavior remains in place where currently implemented."
+      ],
+      "file_operations": [
+        {
+          "path": "frontend/src/hooks/useQueries.ts",
+          "operation": "modify",
+          "description": "Remove messageId === 0n failure checks in useSendMessage; treat failures exclusively as thrown errors (traps/rejects) and continue to sanitize and rethrow for the UI. Also adjust useMessages polling/refetchInterval behavior so transient errors do not permanently stop background refresh."
+        },
+        {
+          "path": "frontend/src/utils/chatErrorMessages.ts",
+          "operation": "modify",
+          "description": "Review and, if needed, refine sanitizeChatError mappings so send failures resulting from trapped backend errors consistently produce guest-friendly English messages (e.g., 'Unable to send message. Please try again.')."
+        },
+        {
+          "path": "frontend/src/components/ChatRoom.tsx",
+          "operation": "modify",
+          "description": "Ensure the chat UI does not rely on sentinel values for send success/failure; on send failure, show the existing sanitized message and keep the retry path usable (e.g., preserve unsent payload / allow resend)."
         }
       ]
     }

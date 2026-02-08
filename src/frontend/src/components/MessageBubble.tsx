@@ -47,7 +47,7 @@ export default function MessageBubble({
   const [isDownloadingVideo, setIsDownloadingVideo] = useState(false);
   const [videoDownloadProgress, setVideoDownloadProgress] = useState(0);
   const audioRef = useRef<HTMLAudioElement | null>(null);
-  const isOwnMessage = message.nickname === currentNickname;
+  const isOwnMessage = message.owner === currentUserId;
 
   // Get initials from nickname for avatar fallback
   const getInitials = (name: string) => {

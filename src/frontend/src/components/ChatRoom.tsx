@@ -25,6 +25,7 @@ import {
   useRemoveReaction
 } from '../hooks/useQueries';
 import { useActor } from '../hooks/useActor';
+import { useVisualViewportOffset } from '../hooks/useVisualViewportOffset';
 import MessageBubble from './MessageBubble';
 import EmojiPicker from './EmojiPicker';
 import MediaPicker from './MediaPicker';
@@ -75,6 +76,8 @@ export default function ChatRoom({ roomId, nickname }: ChatRoomProps) {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const isUserScrollingRef = useRef(false);
   const scrollTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const inputContainerRef = useRef<HTMLDivElement>(null);
+  const isNearBottomRef = useRef(true);
 
   const { actor, isFetching: isActorFetching } = useActor();
   const { data: messages = [], isLoading, isError, error, refetch } = useMessages(roomId);
@@ -85,6 +88,7 @@ export default function ChatRoom({ roomId, nickname }: ChatRoomProps) {
   const deleteMessage = useDeleteMessage();
   const addReaction = useAddReaction();
   const removeReaction = useRemoveReaction();
+  const { keyboardOffset, isKeyboardOpen } = useVisualViewportOffset();
 
   // Generate a unique user ID for reactions (stored in localStorage)
   const [userId] = useState(() => {
@@ -110,6 +114,17 @@ export default function ChatRoom({ roomId, nickname }: ChatRoomProps) {
     const newHeight = Math.min(Math.max(textarea.scrollHeight, 40), 200);
     textarea.style.height = `${newHeight}px`;
   }, [message]);
+
+  // Check if user is near bottom of scroll area
+  const checkIfNearBottom = () => {
+    const scrollArea = scrollViewportRef.current;
+    if (!scrollArea) return false;
+
+    const threshold = 150; // pixels from bottom
+    const isNear = scrollArea.scrollHeight - scrollArea.scrollTop - scrollArea.clientHeight < threshold;
+    isNearBottomRef.current = isNear;
+    return isNear;
+  };
 
   // Scroll to bottom helper
   const scrollToBottom = (behavior: ScrollBehavior = 'smooth') => {
@@ -155,6 +170,8 @@ export default function ChatRoom({ roomId, nickname }: ChatRoomProps) {
     if (!scrollArea) return;
 
     const handleScroll = () => {
+      checkIfNearBottom();
+
       if (scrollTimeoutRef.current) {
         clearTimeout(scrollTimeoutRef.current);
       }
@@ -188,38 +205,26 @@ export default function ChatRoom({ roomId, nickname }: ChatRoomProps) {
     previousMessageCountRef.current = messages.length;
   }, [messages]);
 
-  // Handle viewport resize (keyboard open/close on mobile)
-  useEffect(() => {
-    const handleResize = () => {
+  // Scroll to bottom when input is focused (keyboard opens) - only if near bottom
+  const handleInputFocus = () => {
+    checkIfNearBottom();
+    
+    if (isNearBottomRef.current) {
       setTimeout(() => {
         isUserScrollingRef.current = false;
-        scrollToBottom('instant');
-      }, 100);
-    };
-
-    window.addEventListener('resize', handleResize);
-    
-    if (window.visualViewport) {
-      window.visualViewport.addEventListener('resize', handleResize);
-      window.visualViewport.addEventListener('scroll', handleResize);
+        scrollToBottom('smooth');
+      }, 300);
     }
-
-    return () => {
-      window.removeEventListener('resize', handleResize);
-      if (window.visualViewport) {
-        window.visualViewport.removeEventListener('resize', handleResize);
-        window.visualViewport.removeEventListener('scroll', handleResize);
-      }
-    };
-  }, []);
-
-  // Scroll to bottom when input is focused (keyboard opens)
-  const handleInputFocus = () => {
-    setTimeout(() => {
-      isUserScrollingRef.current = false;
-      scrollToBottom('instant');
-    }, 200);
   };
+
+  // Handle keyboard open/close - only auto-scroll if user was near bottom
+  useEffect(() => {
+    if (isKeyboardOpen && isNearBottomRef.current) {
+      setTimeout(() => {
+        scrollToBottom('smooth');
+      }, 100);
+    }
+  }, [isKeyboardOpen]);
 
   const handleImageSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -340,6 +345,17 @@ export default function ChatRoom({ roomId, nickname }: ChatRoomProps) {
       return;
     }
 
+    // Validate nickname before sending
+    const trimmedNickname = nickname.trim();
+    if (!trimmedNickname) {
+      toastErrorOnce('Nickname cannot be empty', 'video-empty-nickname');
+      return;
+    }
+    if (trimmedNickname.length > 20) {
+      toastErrorOnce('Nickname cannot exceed 20 characters', 'video-nickname-too-long');
+      return;
+    }
+
     setIsUploading(true);
     try {
       console.log('Processing video blob:', videoBlob.size, 'bytes, type:', videoBlob.type);
@@ -360,7 +376,7 @@ export default function ChatRoom({ roomId, nickname }: ChatRoomProps) {
       await sendMessage.mutateAsync({ 
         roomId, 
         content: '🎬 Video message', 
-        nickname,
+        nickname: trimmedNickname,
         video: blob
       });
       
@@ -388,6 +404,17 @@ export default function ChatRoom({ roomId, nickname }: ChatRoomProps) {
       return;
     }
 
+    // Validate nickname before sending
+    const trimmedNickname = nickname.trim();
+    if (!trimmedNickname) {
+      toastErrorOnce('Nickname cannot be empty', 'audio-empty-nickname');
+      return;
+    }
+    if (trimmedNickname.length > 20) {
+      toastErrorOnce('Nickname cannot exceed 20 characters', 'audio-nickname-too-long');
+      return;
+    }
+
     setIsUploading(true);
     try {
       console.log('Processing audio blob:', audioBlob.size, 'bytes, type:', audioBlob.type);
@@ -408,7 +435,7 @@ export default function ChatRoom({ roomId, nickname }: ChatRoomProps) {
       await sendMessage.mutateAsync({ 
         roomId, 
         content: '🎵 Audio message', 
-        nickname,
+        nickname: trimmedNickname,
         audio: blob
       });
       
@@ -441,6 +468,17 @@ export default function ChatRoom({ roomId, nickname }: ChatRoomProps) {
 
     if (roomExists === false) {
       toastErrorOnce('Room does not exist. Please check the room code.', 'send-room-not-exist');
+      return;
+    }
+
+    // Validate nickname before sending
+    const trimmedNickname = nickname.trim();
+    if (!trimmedNickname) {
+      toastErrorOnce('Nickname cannot be empty', 'send-empty-nickname');
+      return;
+    }
+    if (trimmedNickname.length > 20) {
+      toastErrorOnce('Nickname cannot exceed 20 characters', 'send-nickname-too-long');
       return;
     }
 
@@ -485,7 +523,7 @@ export default function ChatRoom({ roomId, nickname }: ChatRoomProps) {
         await sendMessage.mutateAsync({ 
           roomId, 
           content: messageToSend || (videoToSend ? '🎬 Video' : audioToSend ? '🎵 Audio' : '📷 Image'), 
-          nickname,
+          nickname: trimmedNickname,
           replyToId: replyToSend?.id ?? null,
           image: imageToSend,
           video: videoToSend,
@@ -529,39 +567,47 @@ export default function ChatRoom({ roomId, nickname }: ChatRoomProps) {
       }
       const sanitizedError = sanitizeChatError(error);
       setSendError(sanitizedError);
-      // Don't show duplicate toast when inline error is shown
+      
+      // Show toast for edit failures (send failures already show inline error)
+      if (editToSend) {
+        toastErrorOnce(sanitizedError, 'edit-message-error');
+      }
     }
   };
 
-  const handleRetrySend = async () => {
+  const handleRetry = async () => {
     if (!unsentPayload) return;
-
-    if (!actor) {
-      toastErrorOnce('Connection not ready. Please wait a moment and try again.', 'retry-actor-not-ready');
-      return;
-    }
-
+    
     setSendError(null);
     
     try {
+      // Validate nickname before retrying
+      const trimmedNickname = nickname.trim();
+      if (!trimmedNickname) {
+        toastErrorOnce('Nickname cannot be empty', 'retry-empty-nickname');
+        return;
+      }
+      if (trimmedNickname.length > 20) {
+        toastErrorOnce('Nickname cannot exceed 20 characters', 'retry-nickname-too-long');
+        return;
+      }
+
       await sendMessage.mutateAsync({ 
         roomId, 
         content: unsentPayload.content || (unsentPayload.video ? '🎬 Video' : unsentPayload.audio ? '🎵 Audio' : '📷 Image'), 
-        nickname,
+        nickname: trimmedNickname,
         replyToId: unsentPayload.replyToId,
         image: unsentPayload.image,
         video: unsentPayload.video,
         audio: unsentPayload.audio
       });
       
-      // Clear everything on success
-      setUnsentPayload(null);
+      // Clear on success
       setMessage('');
+      setUnsentPayload(null);
       handleRemoveImage();
       handleRemoveVideo();
       setReplyingTo(null);
-      
-      toastSuccessOnce('Message sent!', 'retry-success');
       
       // Faster scroll after send
       setTimeout(() => {
@@ -574,6 +620,20 @@ export default function ChatRoom({ roomId, nickname }: ChatRoomProps) {
     }
   };
 
+  const handleEmojiSelect = (emoji: string) => {
+    setMessage(prev => prev + emoji);
+    setShowEmojiPicker(false);
+    textareaRef.current?.focus();
+  };
+
+  const handleMediaSelect = (mediaUrl: string) => {
+    const blob = ExternalBlob.fromURL(mediaUrl);
+    setSelectedImage(blob);
+    setImagePreview(mediaUrl);
+    setShowMediaPicker(false);
+    toastSuccessOnce('Media selected! Click send to share.', 'media-selected');
+  };
+
   const handleReply = (msg: MessageView) => {
     setReplyingTo(msg);
     setEditingMessage(null);
@@ -584,536 +644,357 @@ export default function ChatRoom({ roomId, nickname }: ChatRoomProps) {
     setEditingMessage(msg);
     setReplyingTo(null);
     setMessage(msg.content);
+    if (msg.imageUrl) {
+      setSelectedImage(msg.imageUrl);
+      setImagePreview(msg.imageUrl.getDirectURL());
+    }
+    if (msg.videoUrl) {
+      setSelectedVideo(msg.videoUrl);
+      setVideoPreview(msg.videoUrl.getDirectURL());
+    }
+    if (msg.audioUrl) {
+      setSelectedAudio(msg.audioUrl);
+    }
     textareaRef.current?.focus();
   };
 
-  const handleDeleteClick = (msg: MessageView) => {
+  const handleDelete = (msg: MessageView) => {
     setMessageToDelete(msg);
   };
 
-  const handleConfirmDelete = async () => {
+  const confirmDelete = async () => {
     if (!messageToDelete) return;
 
     try {
-      // Optimistic delete - message disappears instantly
-      await deleteMessage.mutateAsync({
-        roomId,
-        messageId: messageToDelete.id,
-      });
-      toastSuccessOnce('Message deleted', 'message-deleted');
+      await deleteMessage.mutateAsync({ roomId, messageId: messageToDelete.id });
       setMessageToDelete(null);
+      toastSuccessOnce('Message deleted', 'message-deleted');
     } catch (error) {
-      console.error('Failed to delete message:', error);
+      console.error('Error deleting message:', error);
       const sanitizedError = sanitizeChatError(error);
-      toastErrorOnce(sanitizedError, 'delete-error');
+      toastErrorOnce(sanitizedError, 'delete-message-error');
     }
   };
 
-  const handleCancelDelete = () => {
-    setMessageToDelete(null);
-  };
-
   const handleReaction = async (messageId: bigint, emoji: string) => {
+    const msg = messages.find(m => m.id === messageId);
+    if (!msg) return;
+
+    const existingReaction = msg.reactions.find(r => r.userId === userId && r.emoji === emoji);
+
     try {
-      const msg = messages.find(m => m.id === messageId);
-      if (!msg) return;
-
-      const existingReaction = msg.reactions.find(
-        r => r.userId === userId && r.emoji === emoji
-      );
-
       if (existingReaction) {
-        // Optimistic remove - reaction disappears instantly
-        await removeReaction.mutateAsync({
-          roomId,
-          messageId,
-          userId,
-          emoji,
-        });
+        await removeReaction.mutateAsync({ roomId, messageId, emoji });
       } else {
-        // Optimistic add - reaction appears instantly
-        await addReaction.mutateAsync({
-          roomId,
-          messageId,
-          userId,
-          emoji,
-        });
+        await addReaction.mutateAsync({ roomId, messageId, emoji });
       }
     } catch (error) {
-      console.error('Failed to toggle reaction:', error);
+      console.error('Error updating reaction:', error);
       const sanitizedError = sanitizeChatError(error);
       toastErrorOnce(sanitizedError, 'reaction-error');
     }
   };
 
-  const handleCancelReply = () => {
-    setReplyingTo(null);
-  };
-
-  const handleCancelEdit = () => {
-    setEditingMessage(null);
-    setMessage('');
-    handleRemoveImage();
-    handleRemoveVideo();
-  };
-
-  const handleEmojiSelect = (emoji: string) => {
-    setMessage((prev) => prev + emoji);
-    setShowEmojiPicker(false);
-    textareaRef.current?.focus();
-  };
-
-  const handleMediaSelect = async (mediaUrl: string) => {
-    // Check if it's a blob URL (custom sticker)
-    if (mediaUrl.includes('blob:') || mediaUrl.includes('/blobs/')) {
-      try {
-        const blob = ExternalBlob.fromURL(mediaUrl);
-        setSelectedImage(blob);
-        setImagePreview(mediaUrl);
-        toastSuccessOnce('Sticker selected! Click send to share.', 'sticker-selected');
-      } catch (error) {
-        console.error('Error loading sticker:', error);
-        toastErrorOnce('Failed to load sticker', 'sticker-load-error');
-      }
-    } else {
-      // Regular GIF URL - add to message text
-      setMessage((prev) => (prev ? `${prev} ${mediaUrl}` : mediaUrl));
-    }
-    setShowMediaPicker(false);
-    textareaRef.current?.focus();
-  };
-
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    // Shift + Enter: insert newline (default behavior)
-    // Enter alone: send message
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      handleSendMessage();
-    }
-    if (e.key === 'Escape') {
-      if (editingMessage) {
-        handleCancelEdit();
-      } else if (replyingTo) {
-        handleCancelReply();
-      }
-    }
-  };
-
-  const handleRetry = () => {
-    refetch();
-  };
-
-  const getMessagePreview = (msg: MessageView) => {
-    const text = msg.content.length > 50 ? msg.content.substring(0, 50) + '...' : msg.content;
-    return text;
-  };
-
-  const isActorLoading = !actor && isActorFetching;
-  const showConnectionError = !actor && !isActorFetching;
-  const canSend = !!actor && !isUploading && (uploadProgress === 0 || uploadProgress === 100);
-
-  return (
-    <div className="flex h-full w-full flex-col">
-      {/* Messages Area - Scrollable, fills available space */}
-      <div className="flex-1 min-h-0 overflow-hidden">
-        <div className="container h-full max-w-5xl">
-          <ScrollArea className="h-full" ref={scrollViewportRef}>
-            <div className="p-4 pb-2">
-              {showConnectionError && (
-                <Alert variant="destructive" className="mb-4">
-                  <AlertCircle className="h-4 w-4" />
-                  <AlertDescription>
-                    <div className="space-y-2">
-                      <p className="font-semibold">Connection Error</p>
-                      <p>Failed to connect to the backend. Please check your connection.</p>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={handleRetry}
-                        className="mt-2"
-                      >
-                        Retry Connection
-                      </Button>
-                    </div>
-                  </AlertDescription>
-                </Alert>
-              )}
-
-              {isError && !showConnectionError && (
-                <Alert variant="destructive" className="mb-4">
-                  <AlertCircle className="h-4 w-4" />
-                  <AlertDescription className="flex items-center justify-between">
-                    <span>
-                      {error instanceof Error ? error.message : sanitizeChatError(error)}
-                    </span>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={handleRetry}
-                      className="ml-2"
-                    >
-                      Retry
-                    </Button>
-                  </AlertDescription>
-                </Alert>
-              )}
-              
-              {isLoading || isActorLoading ? (
-                <div className="flex min-h-[400px] items-center justify-center">
-                  <div className="text-center space-y-2">
-                    <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent mx-auto" />
-                    <p className="text-sm text-muted-foreground">
-                      {isActorLoading ? 'Connecting...' : 'Loading messages...'}
-                    </p>
-                  </div>
-                </div>
-              ) : messages.length === 0 && !showConnectionError && !isError ? (
-                <div className="flex min-h-[400px] items-center justify-center">
-                  <div className="text-center space-y-2">
-                    <img
-                      src="/assets/generated/chat-privacy-icon-transparent.dim_64x64.png"
-                      alt="No messages"
-                      className="h-16 w-16 mx-auto opacity-50"
-                    />
-                    <p className="text-muted-foreground">No messages yet. Start the conversation!</p>
-                  </div>
-                </div>
-              ) : !showConnectionError ? (
-                <div className="space-y-4">
-                  {messages.map((msg) => (
-                    <MessageBubble 
-                      key={`${msg.id}-${msg.timestamp}`} 
-                      message={msg} 
-                      currentNickname={nickname}
-                      currentUserId={userId}
-                      onReply={handleReply}
-                      onEdit={handleEdit}
-                      onDelete={handleDeleteClick}
-                      onReaction={handleReaction}
-                      onJumpToMessage={handleJumpToMessage}
-                      allMessages={messages}
-                    />
-                  ))}
-                  <div ref={messagesEndRef} className="h-1" />
-                </div>
-              ) : null}
-            </div>
-          </ScrollArea>
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-full">
+        <div className="text-center space-y-4">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto"></div>
+          <p className="text-muted-foreground">Loading messages...</p>
         </div>
       </div>
+    );
+  }
 
-      {/* Input Area - Fixed at bottom with safe area support */}
-      <div className="shrink-0 border-t bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 pb-safe">
-        <div className="container max-w-5xl">
-          <div className="p-4">
-            {sendError && (
-              <Alert variant="destructive" className="mb-3">
-                <AlertDescription className="flex items-center justify-between">
-                  <span>{sendError}</span>
-                  {unsentPayload && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={handleRetrySend}
-                      disabled={sendMessage.isPending}
-                      className="ml-2 shrink-0"
-                    >
-                      {sendMessage.isPending ? (
-                        <div className="flex items-center gap-2">
-                          <div className="h-3 w-3 animate-spin rounded-full border-2 border-current border-t-transparent" />
-                          Retrying...
-                        </div>
-                      ) : (
-                        'Retry'
-                      )}
-                    </Button>
-                  )}
-                </AlertDescription>
-              </Alert>
-            )}
+  if (isError) {
+    return (
+      <div className="flex items-center justify-center h-full p-4">
+        <Alert variant="destructive" className="max-w-md">
+          <AlertCircle className="h-4 w-4" />
+          <AlertDescription>
+            {sanitizeChatError(error)}
+          </AlertDescription>
+        </Alert>
+      </div>
+    );
+  }
 
-            {replyingTo && (
-              <div className="mb-2 flex items-center gap-2 rounded-lg bg-muted/50 p-2 border border-primary/20">
-                <div className="flex-1 min-w-0">
-                  <p className="text-xs font-semibold text-primary">
-                    Replying to {replyingTo.nickname}
-                  </p>
-                  <p className="text-xs text-muted-foreground truncate">
-                    {getMessagePreview(replyingTo)}
-                  </p>
-                </div>
+  return (
+    <div className="flex flex-col h-full">
+      {/* Messages Area */}
+      <ScrollArea 
+        className="flex-1 px-4"
+        ref={scrollViewportRef}
+      >
+        <div className="py-4 space-y-4 max-w-4xl mx-auto">
+          {messages.length === 0 ? (
+            <div className="text-center py-12 space-y-2">
+              <p className="text-muted-foreground">No messages yet</p>
+              <p className="text-sm text-muted-foreground">
+                Be the first to send a message!
+              </p>
+            </div>
+          ) : (
+            messages.map((msg) => (
+              <MessageBubble
+                key={msg.id.toString()}
+                message={msg}
+                currentNickname={nickname}
+                currentUserId={userId}
+                onReply={handleReply}
+                onEdit={handleEdit}
+                onDelete={handleDelete}
+                onReaction={handleReaction}
+                onJumpToMessage={handleJumpToMessage}
+                allMessages={messages}
+              />
+            ))
+          )}
+          <div ref={messagesEndRef} />
+        </div>
+      </ScrollArea>
+
+      {/* Input Area */}
+      <div 
+        ref={inputContainerRef}
+        className="border-t bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80 transition-all duration-200 ease-out"
+        style={{
+          paddingBottom: `${keyboardOffset}px`,
+        }}
+      >
+        <div className="max-w-4xl mx-auto p-4 space-y-3">
+          {/* Send Error Alert */}
+          {sendError && (
+            <Alert variant="destructive">
+              <AlertCircle className="h-4 w-4" />
+              <AlertDescription className="flex items-center justify-between">
+                <span>{sendError}</span>
                 <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-6 w-6 shrink-0"
-                  onClick={handleCancelReply}
+                  variant="outline"
+                  size="sm"
+                  onClick={handleRetry}
+                  disabled={sendMessage.isPending}
                 >
-                  <X className="h-4 w-4" />
+                  {sendMessage.isPending ? 'Retrying...' : 'Retry'}
                 </Button>
-              </div>
-            )}
+              </AlertDescription>
+            </Alert>
+          )}
 
-            {editingMessage && (
-              <div className="mb-2 flex items-center gap-2 rounded-lg bg-accent/50 p-2 border border-accent">
-                <div className="flex-1 min-w-0">
-                  <p className="text-xs font-semibold text-accent-foreground">
-                    Editing message
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    Press Enter to save, Shift+Enter for new line, Esc to cancel
-                  </p>
-                </div>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-6 w-6 shrink-0"
-                  onClick={handleCancelEdit}
-                >
-                  <X className="h-4 w-4" />
-                </Button>
-              </div>
-            )}
-
-            {imagePreview && (
-              <div className="mb-2 relative rounded-lg border border-primary/20 p-2 bg-muted/50">
-                <div className="flex items-center gap-2">
-                  <img 
-                    src={imagePreview} 
-                    alt="Preview" 
-                    className="h-20 w-20 object-cover rounded"
-                  />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-xs font-semibold">Image ready to send</p>
-                    {uploadProgress > 0 && uploadProgress < 100 && (
-                      <div className="mt-1">
-                        <div className="h-1.5 w-full bg-muted rounded-full overflow-hidden">
-                          <div 
-                            className="h-full bg-primary transition-all duration-300"
-                            style={{ width: `${uploadProgress}%` }}
-                          />
-                        </div>
-                        <p className="text-xs text-muted-foreground mt-1">
-                          Uploading: {uploadProgress}%
-                        </p>
-                      </div>
-                    )}
-                  </div>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-6 w-6 shrink-0"
-                    onClick={handleRemoveImage}
-                  >
-                    <X className="h-4 w-4" />
-                  </Button>
-                </div>
-              </div>
-            )}
-
-            {videoPreview && (
-              <div className="mb-2 relative rounded-lg border border-primary/20 p-2 bg-muted/50">
-                <div className="flex items-center gap-2">
-                  <video 
-                    src={videoPreview} 
-                    className="h-20 w-20 object-cover rounded"
-                    muted
-                  />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-xs font-semibold">Video ready to send</p>
-                    {uploadProgress > 0 && uploadProgress < 100 && (
-                      <div className="mt-1">
-                        <div className="h-1.5 w-full bg-muted rounded-full overflow-hidden">
-                          <div 
-                            className="h-full bg-primary transition-all duration-300"
-                            style={{ width: `${uploadProgress}%` }}
-                          />
-                        </div>
-                        <p className="text-xs text-muted-foreground mt-1">
-                          Uploading: {uploadProgress}%
-                        </p>
-                      </div>
-                    )}
-                  </div>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-6 w-6 shrink-0"
-                    onClick={handleRemoveVideo}
-                  >
-                    <X className="h-4 w-4" />
-                  </Button>
-                </div>
-              </div>
-            )}
-            
-            <div className="flex items-end gap-2">
-              <div className="relative flex-1">
-                <Textarea
-                  ref={textareaRef}
-                  value={message}
-                  onChange={(e) => setMessage(e.target.value)}
-                  onKeyDown={handleKeyDown}
-                  onPaste={handlePaste}
-                  onFocus={handleInputFocus}
-                  placeholder={
-                    editingMessage 
-                      ? "Edit your message... (Enter to send, Shift+Enter for new line)" 
-                      : "Type a message... (Enter to send, Shift+Enter for new line)"
-                  }
-                  className="pr-40 min-h-[40px] max-h-[200px] resize-none"
-                  rows={1}
-                  disabled={!canSend || sendMessage.isPending || editMessage.isPending}
-                />
-                <div className="absolute right-2 top-2 flex gap-1">
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    className="h-8 w-8"
-                    onClick={() => fileInputRef.current?.click()}
-                    disabled={!canSend || sendMessage.isPending || editMessage.isPending}
-                    title="Upload image"
-                  >
-                    <Upload className="h-4 w-4" />
-                  </Button>
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    accept="image/jpeg,image/png,image/gif,image/webp"
-                    onChange={handleImageSelect}
-                    className="hidden"
-                  />
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    className="h-8 w-8"
-                    onClick={() => {
-                      setShowVideoUploader(!showVideoUploader);
-                      setShowAudioRecorder(false);
-                      setShowEmojiPicker(false);
-                      setShowMediaPicker(false);
-                    }}
-                    disabled={!canSend || sendMessage.isPending || editMessage.isPending}
-                    title="Upload video"
-                  >
-                    <Video className="h-4 w-4" />
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    className="h-8 w-8"
-                    onClick={() => {
-                      setShowAudioRecorder(!showAudioRecorder);
-                      setShowVideoUploader(false);
-                      setShowEmojiPicker(false);
-                      setShowMediaPicker(false);
-                    }}
-                    disabled={!canSend || sendMessage.isPending || editMessage.isPending}
-                    title="Record audio"
-                  >
-                    <Mic className="h-4 w-4" />
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    className="h-8 w-8"
-                    onClick={() => {
-                      setShowEmojiPicker(!showEmojiPicker);
-                      setShowMediaPicker(false);
-                      setShowAudioRecorder(false);
-                      setShowVideoUploader(false);
-                    }}
-                    disabled={!canSend || sendMessage.isPending || editMessage.isPending}
-                  >
-                    <Smile className="h-4 w-4" />
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    className="h-8 w-8"
-                    onClick={() => {
-                      setShowMediaPicker(!showMediaPicker);
-                      setShowEmojiPicker(false);
-                      setShowAudioRecorder(false);
-                      setShowVideoUploader(false);
-                    }}
-                    disabled={!canSend || sendMessage.isPending || editMessage.isPending}
-                  >
-                    <ImageIcon className="h-4 w-4" />
-                  </Button>
-                </div>
-                {showEmojiPicker && (
-                  <div className="absolute bottom-full right-0 mb-2 z-50">
-                    <EmojiPicker onSelect={handleEmojiSelect} onClose={() => setShowEmojiPicker(false)} />
-                  </div>
-                )}
-                {showMediaPicker && (
-                  <div className="absolute bottom-full right-0 mb-2 z-50">
-                    <MediaPicker onSelect={handleMediaSelect} onClose={() => setShowMediaPicker(false)} />
-                  </div>
-                )}
-                {showVideoUploader && (
-                  <div className="absolute bottom-full right-0 mb-2 z-50">
-                    <VideoUploader onSend={handleVideoSend} onClose={() => setShowVideoUploader(false)} />
-                  </div>
-                )}
-                {showAudioRecorder && (
-                  <div className="absolute bottom-full right-0 mb-2 z-50">
-                    <AudioRecorder onSend={handleAudioSend} onClose={() => setShowAudioRecorder(false)} />
-                  </div>
-                )}
-              </div>
+          {/* Reply/Edit Indicator */}
+          {(replyingTo || editingMessage) && (
+            <div className="flex items-center justify-between p-2 bg-muted rounded-lg text-sm">
+              <span className="text-muted-foreground">
+                {editingMessage ? 'Editing message' : `Replying to ${replyingTo?.nickname}`}
+              </span>
               <Button
-                onClick={handleSendMessage}
-                disabled={(!message.trim() && !selectedImage && !selectedVideo && !selectedAudio) || !canSend || sendMessage.isPending || editMessage.isPending}
-                size="icon"
-                className="h-10 w-10 shrink-0"
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  setReplyingTo(null);
+                  setEditingMessage(null);
+                  setMessage('');
+                  handleRemoveImage();
+                  handleRemoveVideo();
+                }}
               >
-                {(sendMessage.isPending || editMessage.isPending) ? (
-                  <div className="h-4 w-4 animate-spin rounded-full border-2 border-background border-t-transparent" />
-                ) : (
-                  <Send className="h-4 w-4" />
-                )}
+                <X className="h-4 w-4" />
               </Button>
             </div>
-            <p className="mt-2 text-xs text-muted-foreground text-center">
-              Messages auto-delete after {messageTTLHours} hours • Press Enter to send, Shift+Enter for new line
-            </p>
+          )}
+
+          {/* Image Preview */}
+          {imagePreview && (
+            <div className="relative inline-block">
+              <img
+                src={imagePreview}
+                alt="Preview"
+                className="max-h-32 rounded-lg border"
+              />
+              <Button
+                variant="destructive"
+                size="sm"
+                className="absolute -top-2 -right-2 h-6 w-6 rounded-full p-0"
+                onClick={handleRemoveImage}
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+          )}
+
+          {/* Video Preview */}
+          {videoPreview && (
+            <div className="relative inline-block">
+              <video
+                src={videoPreview}
+                className="max-h-32 rounded-lg border"
+                controls
+              />
+              <Button
+                variant="destructive"
+                size="sm"
+                className="absolute -top-2 -right-2 h-6 w-6 rounded-full p-0"
+                onClick={handleRemoveVideo}
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+          )}
+
+          {/* Upload Progress */}
+          {isUploading && uploadProgress > 0 && (
+            <div className="space-y-1">
+              <div className="flex justify-between text-xs text-muted-foreground">
+                <span>Uploading...</span>
+                <span>{uploadProgress}%</span>
+              </div>
+              <div className="h-1 bg-muted rounded-full overflow-hidden">
+                <div 
+                  className="h-full bg-primary transition-all duration-300"
+                  style={{ width: `${uploadProgress}%` }}
+                />
+              </div>
+            </div>
+          )}
+
+          {/* Input Row */}
+          <div className="flex gap-2 items-end">
+            <div className="flex gap-1">
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => setShowEmojiPicker(!showEmojiPicker)}
+                disabled={isUploading}
+              >
+                <Smile className="h-5 w-5" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={isUploading}
+              >
+                <ImageIcon className="h-5 w-5" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => setShowMediaPicker(!showMediaPicker)}
+                disabled={isUploading}
+              >
+                <Upload className="h-5 w-5" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => setShowAudioRecorder(!showAudioRecorder)}
+                disabled={isUploading}
+              >
+                <Mic className="h-5 w-5" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => setShowVideoUploader(!showVideoUploader)}
+                disabled={isUploading}
+              >
+                <Video className="h-5 w-5" />
+              </Button>
+            </div>
+
+            <Textarea
+              ref={textareaRef}
+              value={message}
+              onChange={(e) => setMessage(e.target.value)}
+              onPaste={handlePaste}
+              onFocus={handleInputFocus}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault();
+                  handleSendMessage();
+                }
+              }}
+              placeholder="Type a message..."
+              className="flex-1 min-h-[40px] max-h-[200px] resize-none"
+              disabled={isUploading}
+            />
+
+            <Button
+              onClick={handleSendMessage}
+              disabled={
+                sendMessage.isPending || 
+                isUploading || 
+                (!message.trim() && !selectedImage && !selectedVideo && !selectedAudio)
+              }
+              size="icon"
+              className="shrink-0"
+            >
+              {sendMessage.isPending ? (
+                <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white" />
+              ) : (
+                <Send className="h-5 w-5" />
+              )}
+            </Button>
           </div>
+
+          {/* Emoji Picker */}
+          {showEmojiPicker && (
+            <EmojiPicker
+              onSelect={handleEmojiSelect}
+              onClose={() => setShowEmojiPicker(false)}
+            />
+          )}
+
+          {/* Media Picker */}
+          {showMediaPicker && (
+            <MediaPicker
+              onSelect={handleMediaSelect}
+              onClose={() => setShowMediaPicker(false)}
+            />
+          )}
+
+          {/* Audio Recorder */}
+          {showAudioRecorder && (
+            <AudioRecorder
+              onSend={handleAudioSend}
+              onClose={() => setShowAudioRecorder(false)}
+            />
+          )}
+
+          {/* Video Uploader */}
+          {showVideoUploader && (
+            <VideoUploader
+              onSend={handleVideoSend}
+              onClose={() => setShowVideoUploader(false)}
+            />
+          )}
         </div>
       </div>
 
       {/* Delete Confirmation Dialog */}
-      <AlertDialog open={!!messageToDelete} onOpenChange={(open) => !open && handleCancelDelete()}>
+      <AlertDialog open={!!messageToDelete} onOpenChange={() => setMessageToDelete(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete this message?</AlertDialogTitle>
+            <AlertDialogTitle>Delete Message</AlertDialogTitle>
             <AlertDialogDescription>
-              This action cannot be undone. The message will be permanently removed from the chat.
+              Are you sure you want to delete this message? This action cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel onClick={handleCancelDelete}>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={handleConfirmDelete}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-            >
-              {deleteMessage.isPending ? (
-                <div className="flex items-center gap-2">
-                  <div className="h-4 w-4 animate-spin rounded-full border-2 border-background border-t-transparent" />
-                  Deleting...
-                </div>
-              ) : (
-                'Delete'
-              )}
-            </AlertDialogAction>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmDelete}>Delete</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Hidden file input */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*"
+        onChange={handleImageSelect}
+        className="hidden"
+      />
     </div>
   );
 }

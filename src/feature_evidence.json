@@ -2,10 +2,12 @@
   "kind": "feature_evidence_report",
   "features": [
     {
-      "featureId": "feature-identify-and-fix-the-root-cause-of-the-per-send-failure-so-that-sending-a-message-succeeds-reliably-from-the-chatroom-ui-in-particular-ensure-anonymous-users-no-internet-identity-can-send-messages-without-backend-authorization-traps-e-g-remove-relax-accesscontrol-permission-checks-for-core-chat-operations-like-sendmessage-consistent-with-the-app-s-anonymous-chat-intent",
-      "featureTitle": "Identify and fix the root cause of the per-send failure so that sending a message succeeds reliably from the ChatRoom UI. In particular, ensure anonymous users (no Internet Identity) can send messages without backend authorization traps (e.g., remove/relax AccessControl permission checks for core chat operations like `sendMessage`, consistent with the app’s anonymous chat intent).",
+      "featureId": "feature-update-frontend-room-create-join-and-message-send-flows-to-work-in-guest-mode-anonymous-actor-without-requiring-internet-identity-and-ensure-errors-are-surfaced-as-clear-guest-friendly-messages-instead-of-generic-failures",
+      "featureTitle": "Update frontend room create/join and message send flows to work in guest mode (anonymous actor) without requiring Internet Identity, and ensure errors are surfaced as clear guest-friendly messages instead of generic failures.",
       "files": [
-        "frontend/src/components/ChatRoom.tsx"
+        "frontend/src/components/ChatRoom.tsx",
+        "frontend/src/components/WelcomeScreen.tsx",
+        "frontend/src/hooks/useQueries.ts"
       ],
       "components": [
         "http-outcalls@3.0.0",
@@ -19,16 +21,17 @@
         "github-export-icp-cli@1.0.0"
       ],
       "testIds": [
-        "REQ-5"
+        "REQ-3"
       ],
       "confidence": "high"
     },
     {
-      "featureId": "feature-improve-error-diagnostics-for-message-send-failures-to-speed-up-future-debugging-when-usesendmessage-fails-ensure-the-console-log-includes-ic-reject-details-reject-code-message-when-present-and-the-sanitized-ui-continues-to-show-a-stable-english-message-via-sanitizechaterror",
-      "featureTitle": "Improve error diagnostics for message send failures to speed up future debugging: when `useSendMessage` fails, ensure the console log includes IC reject details (reject code/message when present) and the sanitized UI continues to show a stable English message via `sanitizeChatError`.",
+      "featureId": "feature-fix-the-unable-to-send-or-receive-messages-failure-mode-by-aligning-frontend-expectations-with-backend-behavior-backend-traps-on-failure-frontend-should-not-rely-on-sentinel-return-values-like-messageid-0n",
+      "featureTitle": "Fix the \"unable to send or receive messages\" failure mode by aligning frontend expectations with backend behavior (backend traps on failure; frontend should not rely on sentinel return values like messageId === 0n).",
       "files": [
+        "frontend/src/components/ChatRoom.tsx",
         "frontend/src/hooks/useQueries.ts",
-        "frontend/src/utils/chatOperationErrors.ts"
+        "frontend/src/utils/chatErrorMessages.ts"
       ],
       "components": [
         "http-outcalls@3.0.0",
@@ -42,7 +45,7 @@
         "github-export-icp-cli@1.0.0"
       ],
       "testIds": [
-        "REQ-6"
+        "REQ-4"
       ],
       "confidence": "high"
     }
