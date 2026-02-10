@@ -48,8 +48,10 @@ export default function MessageBubble({
   const [videoDownloadProgress, setVideoDownloadProgress] = useState(0);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const isOwnMessage = message.owner === currentUserId;
+  
+  // Check if message is optimistic (not yet confirmed by backend)
+  const isOptimistic = (message as any).isOptimistic === true;
 
-  // Get initials from nickname for avatar fallback
   const getInitials = (name: string) => {
     return name
       .split(' ')
@@ -59,18 +61,15 @@ export default function MessageBubble({
       .slice(0, 2);
   };
 
-  // Find the message being replied to - BigInt-safe check
   const repliedToMessage = message.replyToId !== null && message.replyToId !== undefined
     ? allMessages.find(m => m.id === message.replyToId)
     : null;
 
-  // Get message preview text (first 50 chars)
   const getMessagePreview = (content: string) => {
     const text = content.length > 50 ? content.substring(0, 50) + '...' : content;
     return text;
   };
 
-  // Group reactions by emoji and count
   const groupedReactions = message.reactions.reduce((acc, reaction) => {
     if (!acc[reaction.emoji]) {
       acc[reaction.emoji] = {
@@ -87,20 +86,17 @@ export default function MessageBubble({
     return acc;
   }, {} as Record<string, { count: number; users: string[]; hasCurrentUser: boolean }>);
 
-  // Handle reaction click
   const handleReactionClick = (emoji: string) => {
     onReaction(message.id, emoji);
     setShowReactionPicker(false);
   };
 
-  // Handle reply preview click - BigInt-safe check
   const handleReplyPreviewClick = () => {
     if (message.replyToId !== null && message.replyToId !== undefined && onJumpToMessage) {
       onJumpToMessage(message.replyToId);
     }
   };
 
-  // Handle image download (PNG format)
   const handleDownloadImage = async (source: string, filename: string) => {
     try {
       const pngFilename = filename.replace(/\.[^.]+$/, '.png');
@@ -111,7 +107,6 @@ export default function MessageBubble({
     }
   };
 
-  // Handle uploaded image download (PNG format)
   const handleDownloadUploadedImage = async () => {
     if (!message.imageUrl) return;
     
@@ -124,7 +119,6 @@ export default function MessageBubble({
     }
   };
 
-  // Handle video download (MP4 format)
   const handleDownloadVideo = async () => {
     if (!message.videoUrl) return;
     
@@ -149,7 +143,6 @@ export default function MessageBubble({
     }
   };
 
-  // Audio playback controls with enhanced error handling
   useEffect(() => {
     const audio = audioRef.current;
     if (!audio) return;
@@ -241,12 +234,10 @@ export default function MessageBubble({
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
-  // Enhanced URL detection for images and GIFs
   const detectMediaUrls = (text: string): string[] => {
     const mediaUrls: string[] = [];
     const seenUrls = new Set<string>();
     
-    // Pattern 1: Direct file URLs with extensions (including query params and fragments)
     const extensionRegex = /(https?:\/\/[^\s<>"]+\.(gif|png|jpe?g|webp)(?:[?#][^\s<>"]*)?)/gi;
     let match;
     
@@ -258,7 +249,6 @@ export default function MessageBubble({
       }
     }
     
-    // Pattern 2: Tenor URLs (all formats)
     const tenorRegex = /(https?:\/\/(?:[a-z0-9-]+\.)?tenor\.com\/[^\s<>"]+)/gi;
     while ((match = tenorRegex.exec(text)) !== null) {
       const url = match[0];
@@ -268,7 +258,6 @@ export default function MessageBubble({
       }
     }
     
-    // Pattern 3: Giphy URLs (all formats)
     const giphyRegex = /(https?:\/\/(?:[a-z0-9-]+\.)?giphy\.com\/[^\s<>"]+)/gi;
     while ((match = giphyRegex.exec(text)) !== null) {
       const url = match[0];
@@ -278,7 +267,6 @@ export default function MessageBubble({
       }
     }
     
-    // Pattern 4: Imgur URLs
     const imgurRegex = /(https?:\/\/(?:i\.)?imgur\.com\/[^\s<>"]+)/gi;
     while ((match = imgurRegex.exec(text)) !== null) {
       const url = match[0];
@@ -294,16 +282,13 @@ export default function MessageBubble({
   const mediaUrls = detectMediaUrls(message.content);
   const hasMedia = mediaUrls.length > 0;
 
-  // Check if message has uploaded media
   const hasUploadedImage = message.imageUrl !== undefined && message.imageUrl !== null;
   const hasUploadedVideo = message.videoUrl !== undefined && message.videoUrl !== null;
   const hasUploadedAudio = message.audioUrl !== undefined && message.audioUrl !== null;
 
-  // Split content into text and media parts
   const renderContent = () => {
     const parts: React.ReactElement[] = [];
 
-    // Render uploaded image first if present
     if (hasUploadedImage && message.imageUrl) {
       try {
         const imageUrl = message.imageUrl.getDirectURL();
@@ -355,7 +340,6 @@ export default function MessageBubble({
       }
     }
 
-    // Render uploaded video if present
     if (hasUploadedVideo && message.videoUrl) {
       try {
         const videoUrl = message.videoUrl.getDirectURL();
@@ -419,7 +403,6 @@ export default function MessageBubble({
       }
     }
 
-    // Render uploaded audio if present
     if (hasUploadedAudio && message.audioUrl) {
       try {
         const audioUrl = message.audioUrl.getDirectURL();
@@ -483,7 +466,6 @@ export default function MessageBubble({
       }
     }
 
-    // Render text and embedded media
     if (!hasMedia) {
       if (message.content && !message.content.match(/^(🎬 Video|🎵 Audio|📷 Image)( message)?$/)) {
         parts.push(
@@ -495,7 +477,6 @@ export default function MessageBubble({
       return parts.length > 0 ? parts : null;
     }
 
-    // Split content by media URLs and render text + media
     let remainingText = message.content;
     let mediaIndex = 0;
 
@@ -503,7 +484,6 @@ export default function MessageBubble({
       const urlPosition = remainingText.indexOf(url);
       
       if (urlPosition !== -1) {
-        // Add text before the URL
         const textBefore = remainingText.substring(0, urlPosition);
         if (textBefore.trim()) {
           parts.push(
@@ -514,19 +494,14 @@ export default function MessageBubble({
           mediaIndex++;
         }
 
-        // Add the media with error handling and download button
         parts.push(
-          <div key={`media-${index}`} className="relative group/embedded">
+          <div key={`media-${index}`} className="relative group/media">
             <img
               src={url}
-              alt="Shared media"
-              className="rounded-md max-w-full max-h-64 w-auto h-auto object-contain"
+              alt="Embedded media"
+              className="rounded-md max-w-full max-h-64 w-auto h-auto object-contain cursor-pointer hover:opacity-90 transition-opacity"
               loading="lazy"
-              onError={(e) => {
-                console.error('Embedded media load error:', e);
-                const target = e.target as HTMLImageElement;
-                target.style.display = 'none';
-              }}
+              onClick={() => window.open(url, '_blank')}
             />
             <TooltipProvider>
               <Tooltip>
@@ -534,8 +509,11 @@ export default function MessageBubble({
                   <Button
                     variant="secondary"
                     size="icon"
-                    className="absolute top-2 right-2 h-8 w-8 opacity-0 group-hover/embedded:opacity-100 transition-opacity shadow-lg"
-                    onClick={() => handleDownloadImage(url, `embedded-${index}.png`)}
+                    className="absolute top-2 right-2 h-8 w-8 opacity-0 group-hover/media:opacity-100 transition-opacity shadow-lg"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleDownloadImage(url, `media-${index}.png`);
+                    }}
                   >
                     <Download className="h-4 w-4" />
                   </Button>
@@ -548,15 +526,13 @@ export default function MessageBubble({
           </div>
         );
 
-        // Update remaining text
         remainingText = remainingText.substring(urlPosition + url.length);
       }
     });
 
-    // Add remaining text after the last URL
     if (remainingText.trim()) {
       parts.push(
-        <p key={`text-${mediaIndex}`} className="text-sm whitespace-pre-wrap break-words">
+        <p key={`text-end`} className="text-sm whitespace-pre-wrap break-words">
           {remainingText}
         </p>
       );
@@ -565,111 +541,135 @@ export default function MessageBubble({
     return parts.length > 0 ? parts : null;
   };
 
-  // Check if reply preview should be shown - BigInt-safe
-  const hasReplyTo = message.replyToId !== null && message.replyToId !== undefined;
-
   return (
-    <div 
-      id={`message-${message.id}`}
-      data-message-id={message.id.toString()}
-      className="flex gap-3 animate-in fade-in slide-in-from-bottom-2 duration-300 group"
-    >
-      <Avatar className="h-10 w-10 border-2 border-primary/20">
-        <AvatarImage src="/assets/generated/anonymous-avatar-transparent.dim_100x100.png" />
+    <div className={`flex gap-3 ${isOwnMessage ? 'flex-row-reverse' : 'flex-row'}`}>
+      <Avatar className="h-10 w-10 shrink-0">
+        <AvatarImage src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${message.nickname}`} />
         <AvatarFallback>{getInitials(message.nickname)}</AvatarFallback>
       </Avatar>
-      <div className="flex-1 space-y-1">
+
+      <div className={`flex-1 max-w-[70%] space-y-1 ${isOwnMessage ? 'items-end' : 'items-start'}`}>
         <div className="flex items-center gap-2">
           <span className="text-sm font-semibold">{message.nickname}</span>
           <span className="text-xs text-muted-foreground">{timeAgo}</span>
           {message.isEdited && (
-            <Badge variant="secondary" className="text-xs">
-              Edited
+            <Badge variant="secondary" className="text-xs px-1.5 py-0">
+              edited
+            </Badge>
+          )}
+          {isOptimistic && (
+            <Badge variant="outline" className="text-xs px-1.5 py-0 opacity-50">
+              sending...
             </Badge>
           )}
         </div>
-        <div className="rounded-lg bg-muted/50 p-3 max-w-2xl">
-          {/* Reply Preview - Clickable, with hard-unavailable behavior */}
-          {hasReplyTo && (
-            <button
-              onClick={handleReplyPreviewClick}
-              className="mb-2 pl-2 border-l-2 border-primary/40 bg-background/50 rounded p-2 w-full text-left hover:bg-background/70 transition-colors cursor-pointer"
-            >
-              {repliedToMessage ? (
-                <>
-                  <p className="text-xs font-semibold text-primary">
-                    Replying to {repliedToMessage.nickname}
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    {getMessagePreview(repliedToMessage.content)}
-                  </p>
-                </>
-              ) : (
-                <p className="text-xs text-muted-foreground italic">
-                  Message unavailable
-                </p>
-              )}
-            </button>
-          )}
-          
-          <div className="space-y-2">
-            {renderContent()}
+
+        {repliedToMessage && (
+          <div 
+            className="text-xs bg-muted/50 rounded p-2 mb-1 border-l-2 border-primary cursor-pointer hover:bg-muted/70 transition-colors"
+            onClick={handleReplyPreviewClick}
+          >
+            <span className="font-semibold">{repliedToMessage.nickname}</span>
+            <p className="text-muted-foreground truncate">{getMessagePreview(repliedToMessage.content)}</p>
           </div>
+        )}
+
+        <div className={`rounded-lg p-3 space-y-2 ${
+          isOwnMessage 
+            ? 'bg-primary text-primary-foreground' 
+            : 'bg-muted'
+        }`}>
+          {renderContent()}
         </div>
-        
-        {/* Reactions Display */}
-        {Object.keys(groupedReactions).length > 0 && (
-          <div className="flex flex-wrap gap-1 mt-2">
+
+        {message.reactions.length > 0 && (
+          <div className="flex flex-wrap gap-1">
             {Object.entries(groupedReactions).map(([emoji, data]) => (
-              <TooltipProvider key={emoji}>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button
-                      variant={data.hasCurrentUser ? "default" : "outline"}
-                      size="sm"
-                      className="h-7 px-2 text-xs gap-1"
-                      onClick={() => handleReactionClick(emoji)}
-                    >
-                      <span>{emoji}</span>
-                      <span className="font-semibold">{data.count}</span>
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    <p className="text-xs">
-                      {data.users.length === 1 
-                        ? '1 person reacted' 
-                        : `${data.users.length} people reacted`}
-                    </p>
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
+              <Button
+                key={emoji}
+                variant={data.hasCurrentUser ? "default" : "outline"}
+                size="sm"
+                className="h-6 px-2 text-xs"
+                onClick={() => handleReactionClick(emoji)}
+              >
+                {emoji} {data.count}
+              </Button>
             ))}
           </div>
         )}
-        
-        {/* Action Buttons */}
-        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-7 px-2 text-xs"
-            onClick={() => onReply(message)}
-          >
-            <Reply className="h-3 w-3 mr-1" />
-            Reply
-          </Button>
+
+        <div className="flex items-center gap-1">
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-7 w-7"
+                  onClick={() => onReply(message)}
+                >
+                  <Reply className="h-4 w-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent><p>Reply</p></TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+
+          {isOwnMessage && !isOptimistic && (
+            <>
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-7 w-7"
+                      onClick={() => onEdit(message)}
+                    >
+                      <Edit2 className="h-4 w-4" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent><p>Edit</p></TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-7 w-7 text-destructive hover:text-destructive"
+                      onClick={() => onDelete(message)}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent><p>Delete</p></TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            </>
+          )}
+
           <div className="relative">
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-7 px-2 text-xs"
-              onClick={() => setShowReactionPicker(!showReactionPicker)}
-            >
-              <Smile className="h-3 w-3 mr-1" />
-              React
-            </Button>
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7"
+                    onClick={() => setShowReactionPicker(!showReactionPicker)}
+                  >
+                    <Smile className="h-4 w-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent><p>React</p></TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+
             {showReactionPicker && (
-              <div className="absolute bottom-full left-0 mb-1 bg-popover border rounded-lg shadow-lg p-2 flex gap-1 z-50">
+              <div className="absolute bottom-full mb-2 left-0 bg-popover border rounded-lg shadow-lg p-2 flex gap-1 z-10">
                 {REACTION_EMOJIS.map((emoji) => (
                   <Button
                     key={emoji}
@@ -684,28 +684,6 @@ export default function MessageBubble({
               </div>
             )}
           </div>
-          {isOwnMessage && (
-            <>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-7 px-2 text-xs"
-                onClick={() => onEdit(message)}
-              >
-                <Edit2 className="h-3 w-3 mr-1" />
-                Edit
-              </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-7 px-2 text-xs text-destructive hover:text-destructive"
-                onClick={() => onDelete(message)}
-              >
-                <Trash2 className="h-3 w-3 mr-1" />
-                Delete
-              </Button>
-            </>
-          )}
         </div>
       </div>
     </div>

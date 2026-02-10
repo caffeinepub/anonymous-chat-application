@@ -2,11 +2,61 @@
   "kind": "feature_evidence_report",
   "features": [
     {
-      "featureId": "feature-update-frontend-room-create-join-and-message-send-flows-to-work-in-guest-mode-anonymous-actor-without-requiring-internet-identity-and-ensure-errors-are-surfaced-as-clear-guest-friendly-messages-instead-of-generic-failures",
-      "featureTitle": "Update frontend room create/join and message send flows to work in guest mode (anonymous actor) without requiring Internet Identity, and ensure errors are surfaced as clear guest-friendly messages instead of generic failures.",
+      "featureId": "feature-ensure-all-roomid-values-are-normalized-consistently-trimmed-across-the-chat-ui-and-react-query-hooks-so-that-sending-fetching-editing-reacting-and-deleting-messages-all-target-the-exact-same-backend-room-key-and-react-query-cache-key",
+      "featureTitle": "Ensure all roomId values are normalized consistently (trimmed) across the chat UI and React Query hooks so that sending, fetching, editing, reacting, and deleting messages all target the exact same backend room key and React Query cache key.",
       "files": [
+        "frontend/src/App.tsx",
         "frontend/src/components/ChatRoom.tsx",
         "frontend/src/components/WelcomeScreen.tsx",
+        "frontend/src/hooks/useQueries.ts",
+        "frontend/src/utils/roomId.ts"
+      ],
+      "components": [
+        "http-outcalls@3.0.0",
+        "blob-storage@4.0.0",
+        "core-infrastructure@1.0.2",
+        "shadcn-ui@1.0.0",
+        "build-template-react@1.0.0",
+        "initial-app@1.0.0",
+        "authorization@4.0.0",
+        "camera@1.0.0",
+        "github-export-icp-cli@1.0.0"
+      ],
+      "testIds": [
+        "REQ-1"
+      ],
+      "confidence": "high"
+    },
+    {
+      "featureId": "feature-fix-duplicate-message-creation-by-making-sendmessage-idempotent-across-retries-and-ui-double-submission-add-a-client-generated-message-nonce-to-the-sendmessage-call-and-have-the-backend-deduplicate-repeated-sends-with-the-same-nonce-per-room-returning-the-originally-created-messageid-instead-of-creating-a-second-message",
+      "featureTitle": "Fix duplicate message creation by making sendMessage idempotent across retries and UI double-submission: add a client-generated message nonce to the sendMessage call and have the backend deduplicate repeated sends with the same nonce per room, returning the originally-created messageId instead of creating a second message.",
+      "files": [
+        "frontend/src/components/ChatRoom.tsx",
+        "frontend/src/hooks/useQueries.ts",
+        "frontend/src/utils/messageNonce.ts"
+      ],
+      "components": [
+        "http-outcalls@3.0.0",
+        "blob-storage@4.0.0",
+        "core-infrastructure@1.0.2",
+        "shadcn-ui@1.0.0",
+        "build-template-react@1.0.0",
+        "initial-app@1.0.0",
+        "authorization@4.0.0",
+        "camera@1.0.0",
+        "github-export-icp-cli@1.0.0"
+      ],
+      "testIds": [
+        "REQ-2"
+      ],
+      "confidence": "high"
+    },
+    {
+      "featureId": "feature-improve-delete-message-reliability-and-user-feedback-1-prevent-delete-from-being-attempted-against-optimistic-temporary-message-ids-2-show-a-clear-english-error-when-delete-returns-false-due-to-ownership-mismatch-user-can-only-delete-their-own-messages-and-3-automatically-refetch-messages-after-delete-success-failure-to-resync-ui-state",
+      "featureTitle": "Improve delete-message reliability and user feedback: (1) prevent delete from being attempted against optimistic/temporary message IDs, (2) show a clear English error when delete returns false due to ownership mismatch (user can only delete their own messages), and (3) automatically refetch messages after delete success/failure to resync UI state.",
+      "files": [
+        "frontend/src/components/ChatRoom.tsx",
+        "frontend/src/components/MessageBubble.tsx",
         "frontend/src/hooks/useQueries.ts"
       ],
       "components": [
@@ -26,12 +76,11 @@
       "confidence": "high"
     },
     {
-      "featureId": "feature-fix-the-unable-to-send-or-receive-messages-failure-mode-by-aligning-frontend-expectations-with-backend-behavior-backend-traps-on-failure-frontend-should-not-rely-on-sentinel-return-values-like-messageid-0n",
-      "featureTitle": "Fix the \"unable to send or receive messages\" failure mode by aligning frontend expectations with backend behavior (backend traps on failure; frontend should not rely on sentinel return values like messageId === 0n).",
+      "featureId": "feature-add-targeted-diagnostics-console-only-for-duplicate-send-and-delete-failures-log-a-structured-console-group-when-sendmessage-or-deletemessage-fails-or-returns-an-unexpected-result-including-normalized-roomid-messageid-whether-the-message-was-optimistic-and-any-available-ic-reject-details-without-logging-message-content",
+      "featureTitle": "Add targeted diagnostics (console-only) for duplicate send and delete failures: log a structured console group when sendMessage or deleteMessage fails or returns an unexpected result, including normalized roomId, messageId, whether the message was optimistic, and any available IC reject details, without logging message content.",
       "files": [
-        "frontend/src/components/ChatRoom.tsx",
         "frontend/src/hooks/useQueries.ts",
-        "frontend/src/utils/chatErrorMessages.ts"
+        "frontend/src/utils/chatOperationErrors.ts"
       ],
       "components": [
         "http-outcalls@3.0.0",

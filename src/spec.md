@@ -1,12 +1,12 @@
 # Specification
 
 ## Summary
-**Goal:** Let users create/join chat rooms and send/receive messages as guests using only a nickname (no Internet Identity required), with clear error handling.
+**Goal:** Stop duplicate message sends and make message deletion reliable by normalizing room IDs, adding idempotent send behavior, and improving delete handling and diagnostics.
 
 **Planned changes:**
-- Backend: remove Internet Identity / `AccessControl "#user"` requirement for core chat operations (create room, read messages, send messages) while keeping admin-only operations restricted.
-- Backend: validate guest nickname inputs (trim whitespace, require non-empty, enforce max length of 20 characters) and return clear, user-friendly errors for invalid input.
-- Frontend: update room create/join and message send flows to work with an anonymous actor (guest mode) and surface backend errors as clear English messages without getting stuck loading.
-- Frontend: fix messaging failure handling by relying on caught backend errors (traps) rather than sentinel return values (e.g., no `messageId === 0n` checks), and ensure message fetch/send failures remain recoverable.
+- Normalize (trim) `roomId` consistently across the chat UI and all React Query hooks/mutations so fetch/send/edit/react/delete share the same backend room key and cache keys.
+- Make sending idempotent: generate a client nonce per message send and update the backend to deduplicate repeated sends per room/nonce, returning the originally created `messageId` on retries/double-submission.
+- Improve delete reliability and feedback: prevent deletes for optimistic/temporary message IDs, show a clear English ownership error when delete returns `false`, and refetch/ invalidate messages after any delete attempt to resync UI.
+- Add targeted console-only diagnostics for send/delete failures or unexpected results (operation name, normalized roomId, nonce/messageId, optimistic flag, backend result, and IC reject details when available) without logging message content.
 
-**User-visible outcome:** From a fresh session without logging in, a user can enter a nickname and room code to create or join a room, then send and receive messages successfully with understandable error messages when something goes wrong.
+**User-visible outcome:** Messages send only once (even on retries or quick double-submits), deleting messages works reliably within the correct room, and the UI shows clear English feedback for ownership-related delete failures while staying in sync with the backend.

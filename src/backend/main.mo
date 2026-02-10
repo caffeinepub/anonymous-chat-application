@@ -1,24 +1,25 @@
+import Runtime "mo:core/Runtime";
+import Time "mo:core/Time";
 import List "mo:core/List";
 import Map "mo:core/Map";
 import Set "mo:core/Set";
-import Time "mo:core/Time";
 import Text "mo:core/Text";
 import Nat "mo:core/Nat";
 import Array "mo:core/Array";
+import Principal "mo:core/Principal";
 import Storage "blob-storage/Storage";
 import MixinStorage "blob-storage/Mixin";
 import MixinAuthorization "authorization/MixinAuthorization";
 import AccessControl "authorization/access-control";
-import Runtime "mo:core/Runtime";
-
 import Migration "migration";
+
 (with migration = Migration.run)
 actor {
   let accessControlState = AccessControl.initState();
   include MixinAuthorization(accessControlState);
   include MixinStorage();
 
-  type Message = {
+  public type Message = {
     id : Nat;
     content : Text;
     timestamp : Time.Time;
@@ -30,6 +31,7 @@ actor {
     isEdited : Bool;
     reactions : List.List<Reaction>;
     owner : Text;
+    nonce : ?Text;
   };
 
   public type MessageView = {
@@ -44,6 +46,7 @@ actor {
     isEdited : Bool;
     reactions : [Reaction];
     owner : Text;
+    nonce : ?Text;
   };
 
   public type Reaction = {
@@ -58,9 +61,9 @@ actor {
   let messageTTL : Time.Time = 24 * 60 * 60 * 1_000_000_000;
   var nextMessageId : Nat = 0;
 
-  // Persistent set of active room codes
   let activeRooms = Set.empty<Text>();
   let messages = Map.empty<Text, List.List<Message>>();
+  let userProfiles = Map.empty<Principal, UserProfile>();
 
   func ensureRoomMessages(roomId : Text) : List.List<Message> {
     switch (messages.get(roomId)) {
@@ -77,22 +80,6 @@ actor {
     let id = nextMessageId;
     nextMessageId += 1;
     id;
-  };
-
-  public shared ({ caller }) func pruneExpiredMessages() : async () {
-    let now = Time.now();
-    for ((roomId, msgList) in messages.entries()) {
-      let validMsgs = msgList.filter(func(msg) { now - msg.timestamp <= messageTTL });
-      if (validMsgs.size() != msgList.size()) {
-        messages.add(roomId, validMsgs);
-      };
-    };
-
-    for ((roomId, msgList) in messages.entries()) {
-      if (msgList.size() == 0 and not activeRooms.contains(roomId)) {
-        messages.remove(roomId);
-      };
-    };
   };
 
   public query ({ caller }) func roomExists(roomId : Text) : async Bool {
@@ -118,6 +105,7 @@ actor {
       isEdited = message.isEdited;
       reactions = message.reactions.toArray();
       owner = message.owner;
+      nonce = message.nonce;
     };
   };
 
@@ -132,33 +120,44 @@ actor {
     trimmed;
   };
 
-  public shared ({ caller }) func createRoom(joinCode : Text) : async Text {
+  func validateJoinCode(joinCode : Text) {
     let trimmed = joinCode.trim(#char ' ');
     if (trimmed.size() == 0) {
-      Runtime.trap("Room join code cannot be empty or whitespace only");
+      Runtime.trap("Room join code cannot be empty");
     };
     if (trimmed.size() > 30) {
       Runtime.trap("Room join code cannot exceed 30 characters");
     };
+  };
 
-    if (activeRooms.contains(trimmed)) {
-      Runtime.trap("Room already exists");
+  public shared ({ caller }) func createRoom(joinCode : Text) : async Text {
+    validateJoinCode(joinCode);
+    if (activeRooms.contains(joinCode)) {
+      Runtime.trap("Room already exists: " # joinCode);
     };
-
-    activeRooms.add(trimmed);
-    trimmed;
+    activeRooms.add(joinCode);
+    joinCode;
   };
 
   public query ({ caller }) func getMessages(roomId : Text) : async [MessageView] {
-    let trimmed = roomId.trim(#char ' ');
-    if (trimmed.size() == 0 or not activeRooms.contains(trimmed)) {
-      return [];
-    };
-
-    switch (messages.get(trimmed)) {
+    validateJoinCode(roomId);
+    switch (messages.get(roomId)) {
       case (null) { [] };
       case (?msgs) {
         let filteredMsgs = msgs.filter(isNotExpired);
+        filteredMsgs.map<Message, MessageView>(convertMessageToView).toArray();
+      };
+    };
+  };
+
+  public query ({ caller }) func fetchMessagesAfterId(roomId : Text, lastId : Nat) : async [MessageView] {
+    validateJoinCode(roomId);
+    switch (messages.get(roomId)) {
+      case (null) { [] };
+      case (?msgs) {
+        let filteredMsgs = msgs.filter(
+          func(msg) { isNotExpired(msg) and msg.id > lastId }
+        );
         filteredMsgs.map<Message, MessageView>(convertMessageToView).toArray();
       };
     };
@@ -173,12 +172,29 @@ actor {
     image : ?Storage.ExternalBlob,
     video : ?Storage.ExternalBlob,
     audio : ?Storage.ExternalBlob,
+    nonce : Text
   ) : async Nat {
     let validNickname = validateNickname(nickname);
+    validateJoinCode(roomId);
 
-    let trimmedRoomId = roomId.trim(#char ' ');
-    if (trimmedRoomId.size() == 0 or not activeRooms.contains(trimmedRoomId)) {
-      Runtime.trap("Cannot send message: Room does not exist");
+    let roomMessages = ensureRoomMessages(roomId);
+
+    let existing = roomMessages.find(
+      func(msg) {
+        switch (msg.nonce) {
+          case (null) { false };
+          case (?existingNonce) { existingNonce == nonce };
+        };
+      }
+    );
+
+    switch (existing) {
+      case (?duplicate) {
+        if (duplicate.owner == userId and duplicate.content == content) {
+          return duplicate.id;
+        };
+      };
+      case (null) {};
     };
 
     let messageId = nextId();
@@ -195,9 +211,9 @@ actor {
       isEdited = false;
       reactions = List.empty<Reaction>();
       owner = userId;
+      nonce = ?nonce;
     };
 
-    let roomMessages = ensureRoomMessages(trimmedRoomId);
     roomMessages.add(newMessage);
 
     messageId;
@@ -210,8 +226,9 @@ actor {
     newContent : Text,
     newImage : ?Storage.ExternalBlob,
     newVideo : ?Storage.ExternalBlob,
-    newAudio : ?Storage.ExternalBlob,
+    newAudio : ?Storage.ExternalBlob
   ) : async Bool {
+    validateJoinCode(roomId);
     switch (messages.get(roomId)) {
       case (null) { false };
       case (?msgs) {
@@ -247,6 +264,7 @@ actor {
   };
 
   public shared ({ caller }) func deleteMessage(roomId : Text, messageId : Nat, userId : Text) : async Bool {
+    validateJoinCode(roomId);
     switch (messages.get(roomId)) {
       case (null) { false };
       case (?msgs) {
@@ -272,8 +290,9 @@ actor {
     roomId : Text,
     messageId : Nat,
     userId : Text,
-    emoji : Text,
+    emoji : Text
   ) : async Bool {
+    validateJoinCode(roomId);
     switch (messages.get(roomId)) {
       case (null) { false };
       case (?msgs) {
@@ -301,8 +320,9 @@ actor {
     roomId : Text,
     messageId : Nat,
     userId : Text,
-    emoji : Text,
+    emoji : Text
   ) : async Bool {
+    validateJoinCode(roomId);
     switch (messages.get(roomId)) {
       case (null) { false };
       case (?msgs) {
@@ -326,7 +346,42 @@ actor {
     };
   };
 
+  public query ({ caller }) func getCallerUserProfile() : async ?UserProfile {
+    userProfiles.get(caller);
+  };
+
+  public query ({ caller }) func getUserProfile(user : Principal) : async ?UserProfile {
+    userProfiles.get(user);
+  };
+
+  public shared ({ caller }) func saveCallerUserProfile(profile : UserProfile) : async () {
+    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
+      Runtime.trap("Unauthorized: Only users can save profiles");
+    };
+    userProfiles.add(caller, profile);
+  };
+
   public query ({ caller }) func getMessageTTL() : async Time.Time {
     messageTTL;
+  };
+
+  public shared ({ caller }) func pruneExpiredMessages() : async () {
+    if (not (AccessControl.hasPermission(accessControlState, caller, #admin))) {
+      Runtime.trap("Unauthorized: Only admins can prune messages");
+    };
+
+    let now = Time.now();
+    for ((roomId, msgList) in messages.entries()) {
+      let validMsgs = msgList.filter(func(msg) { now - msg.timestamp <= messageTTL });
+      if (validMsgs.size() != msgList.size()) {
+        messages.add(roomId, validMsgs);
+      };
+    };
+
+    for ((roomId, msgList) in messages.entries()) {
+      if (msgList.size() == 0 and not activeRooms.contains(roomId)) {
+        messages.remove(roomId);
+      };
+    };
   };
 };

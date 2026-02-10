@@ -1,96 +1,103 @@
 {
   "kind": "build_request",
-  "title": "Allow guest users to join/create rooms with only a nickname (no Internet Identity required) and restore messaging",
+  "title": "Fix duplicate message sends and failing message deletion in chat",
   "priority": "high",
   "requirements": [
     {
       "id": "REQ-1",
-      "text": "Remove the requirement for Internet Identity / AccessControl \"#user\" permission for core chat operations so that any caller can create rooms, read messages, and send messages using only a nickname.",
-      "target": "backend",
+      "text": "Ensure all roomId values are normalized consistently (trimmed) across the chat UI and React Query hooks so that sending, fetching, editing, reacting, and deleting messages all target the exact same backend room key and React Query cache key.",
+      "target": "frontend",
       "source": {
         "messageIds": [
-          "msg-1"
+          "msg-4"
         ],
         "quotes": [
-          "anyone with a nickname should be able to join"
+          "its sending each and every message twice where its supposed to send only once, its also showing that its not able to delete messages"
         ]
       },
       "acceptanceCriteria": [
-        "An unauthenticated (anonymous) caller can successfully call createRoom(joinCode) and receive the join code back on success.",
-        "An unauthenticated (anonymous) caller can successfully call getMessages(roomId) for an existing room and receive message history (filtered by TTL as currently implemented).",
-        "An unauthenticated (anonymous) caller can successfully call sendMessage(...) for an existing room and receive a non-error response containing the new message id.",
-        "Admin-only operations (e.g., pruneExpiredMessages) remain restricted to admins.",
-        "Room creation still rejects empty/whitespace-only join codes and still rejects duplicate room codes."
+        "When joining/creating a room with leading/trailing spaces in the room code, messages are sent to and fetched from a single consistent room (no split history).",
+        "Deleting a message succeeds in the same room where it was created, regardless of whether the room code originally contained leading/trailing whitespace.",
+        "React Query cache keys for messages and all message mutations use the same normalized roomId value (no duplicate caches for the same room)."
       ]
     },
     {
       "id": "REQ-2",
-      "text": "Add backend-side validation for guest identity inputs so nickname-based usage is safe and consistent: require a non-empty nickname, trim whitespace, and enforce a reasonable max length consistent with the frontend (20 chars).",
-      "target": "backend",
+      "text": "Fix duplicate message creation by making sendMessage idempotent across retries and UI double-submission: add a client-generated message nonce to the sendMessage call and have the backend deduplicate repeated sends with the same nonce per room, returning the originally-created messageId instead of creating a second message.",
+      "target": "both",
       "source": {
         "messageIds": [
-          "msg-1"
+          "msg-4"
         ],
         "quotes": [
-          "anyone with a nickname should be able to join"
+          "its sending each and every message twice where its supposed to send only once"
         ]
       },
       "acceptanceCriteria": [
-        "sendMessage rejects empty/whitespace-only nickname with a clear error (trap message) that is sanitized to a user-friendly frontend message.",
-        "Nicknames are trimmed before being stored on messages.",
-        "Nicknames longer than 20 characters are rejected (or truncated consistently—choose one behavior and apply it consistently across message creation and any profile saving endpoints that accept nicknames)."
+        "If the frontend retries a send due to transient errors, the backend creates at most one message for that user action and returns the same messageId for subsequent attempts using the same nonce.",
+        "If the user triggers send twice quickly for the same composed message payload (e.g., Enter + click, or double click), at most one message is persisted and displayed (no duplicates).",
+        "Existing message sending continues to work for text, image, video, and audio payloads."
       ]
     },
     {
       "id": "REQ-3",
-      "text": "Update frontend room create/join and message send flows to work in guest mode (anonymous actor) without requiring Internet Identity, and ensure errors are surfaced as clear guest-friendly messages instead of generic failures.",
+      "text": "Improve delete-message reliability and user feedback: (1) prevent delete from being attempted against optimistic/temporary message IDs, (2) show a clear English error when delete returns false due to ownership mismatch (user can only delete their own messages), and (3) automatically refetch messages after delete success/failure to resync UI state.",
       "target": "frontend",
       "source": {
         "messageIds": [
-          "msg-1"
+          "msg-4"
         ],
         "quotes": [
-          "Yes i have tried to create the internet identity and yes im unable to join, anyone with a nickname should be able to join"
+          "its also showing that its not able to delete messages"
         ]
       },
       "acceptanceCriteria": [
-        "From a fresh browser session with no Internet Identity login, the Welcome screen allows entering a nickname + room code and successfully creating a room.",
-        "From a fresh browser session with no Internet Identity login, the Welcome screen allows entering a nickname + join code and successfully joining an existing room.",
-        "After joining as a guest, sending a text message succeeds and the message appears in the chat UI.",
-        "If the backend rejects an operation (e.g., room does not exist, empty nickname), the UI displays an English, user-friendly error message (via existing sanitization) and does not get stuck in a loading state."
+        "The Delete action is disabled/hidden for optimistic (client-only) messages that do not yet have a real backend messageId.",
+        "If a delete attempt fails because the backend returns false (e.g., message not owned by the current userId), the UI shows an English error indicating the user can only delete their own messages (and does not misleadingly imply a system failure).",
+        "After a delete attempt (success or failure), the messages list is refetched/invalidated and reflects the backend source of truth (no ghost messages or missing messages due to optimistic cache drift)."
       ]
     },
     {
       "id": "REQ-4",
-      "text": "Fix the \"unable to send or receive messages\" failure mode by aligning frontend expectations with backend behavior (backend traps on failure; frontend should not rely on sentinel return values like messageId === 0n).",
+      "text": "Add targeted diagnostics (console-only) for duplicate send and delete failures: log a structured console group when sendMessage or deleteMessage fails or returns an unexpected result, including normalized roomId, messageId, whether the message was optimistic, and any available IC reject details, without logging message content.",
       "target": "frontend",
       "source": {
         "messageIds": [
-          "msg-1"
+          "msg-4"
         ],
         "quotes": [
-          "i am unable to send or recieve messages as it shows an error"
+          "its sending each and every message twice",
+          "its also showing that its not able to delete messages"
         ]
       },
       "acceptanceCriteria": [
-        "Sending a message no longer checks for messageId === 0n as a failure signal if the backend never returns 0n; failures are handled through caught errors and sanitized messaging.",
-        "When sendMessage fails (e.g., room deleted/does not exist), the UI shows 'Unable to send message. Please try again.' (or another appropriate existing sanitized message) and allows retrying.",
-        "Message fetching failures do not permanently block the chat view; retry/backoff behavior remains in place where currently implemented."
+        "On send failure or suspected duplicate (same nonce resent), the console includes a structured log group with operation name, normalized roomId, nonce, and IC reject details when available, without logging message text/media URLs.",
+        "On delete failure, the console includes a structured log group with operation name, normalized roomId, messageId, isOptimistic flag, backend result (false/exception), and IC reject details when available."
       ]
     }
   ],
   "constraints": [
-    "Backend must remain a single Motoko actor in backend/main.mo; only add backend/migration.mo changes if state schema changes require it.",
-    "Do not edit files under frontend/src/hooks/useInternetIdentity.ts(x), frontend/src/hooks/useActor.ts, frontend/src/main.tsx, or frontend/src/components/ui (immutable paths).",
-    "Use English for all user-facing text."
+    "Backend must remain a single Motoko actor in backend/main.mo.",
+    "Do not edit files under frontend/src/components/ui or any frontend immutablePaths listed in SYSTEM_CONTEXT.",
+    "Use English for any user-facing text."
   ],
   "nonGoals": [
-    "Adding third-party authentication providers (only Internet Identity is supported, but this change should not require it).",
-    "Adding real-time/websocket messaging; keep the existing polling/query-based approach.",
-    "Introducing external databases or non-Motoko backend services."
+    "Implementing real-time messaging via WebSockets or push updates.",
+    "Adding new authentication providers beyond Internet Identity.",
+    "Changing message TTL behavior or introducing external databases."
   ],
   "imageRequirements": {
     "required": [],
     "edits": []
+  },
+  "userProfileUpdate": {
+    "goalsToAdd": [],
+    "goalsToRemove": [],
+    "preferencesToAdd": [],
+    "preferencesToRemove": [],
+    "miscToAdd": [],
+    "miscToRemove": [],
+    "fieldsToSet": {},
+    "fieldsToDelete": []
   }
 }

@@ -1,14 +1,12 @@
-import Map "mo:core/Map";
 import List "mo:core/List";
-import Set "mo:core/Set";
-import Time "mo:core/Time";
+import Map "mo:core/Map";
 import Storage "blob-storage/Storage";
 
 module {
   type OldMessage = {
     id : Nat;
     content : Text;
-    timestamp : Time.Time;
+    timestamp : Int;
     nickname : Text;
     replyToId : ?Nat;
     imageUrl : ?Storage.ExternalBlob;
@@ -19,31 +17,38 @@ module {
     owner : Text;
   };
 
-  type OldUserProfile = {
-    nickname : Text;
+  type OldActor = {
+    messages : Map.Map<Text, List.List<OldMessage>>;
   };
 
-  type OldActor = {
-    messageTTL : Time.Time;
-    nextMessageId : Nat;
-    activeRooms : Set.Set<Text>;
-    messages : Map.Map<Text, List.List<OldMessage>>;
-    userProfiles : Map.Map<Text, OldUserProfile>;
+  type NewMessage = {
+    id : Nat;
+    content : Text;
+    timestamp : Int;
+    nickname : Text;
+    replyToId : ?Nat;
+    imageUrl : ?Storage.ExternalBlob;
+    videoUrl : ?Storage.ExternalBlob;
+    audioUrl : ?Storage.ExternalBlob;
+    isEdited : Bool;
+    reactions : List.List<{ userId : Text; emoji : Text }>;
+    owner : Text;
+    nonce : ?Text;
   };
 
   type NewActor = {
-    messageTTL : Time.Time;
-    nextMessageId : Nat;
-    activeRooms : Set.Set<Text>;
-    messages : Map.Map<Text, List.List<OldMessage>>;
+    messages : Map.Map<Text, List.List<NewMessage>>;
   };
 
   public func run(old : OldActor) : NewActor {
-    {
-      messageTTL = old.messageTTL;
-      nextMessageId = old.nextMessageId;
-      activeRooms = old.activeRooms;
-      messages = old.messages;
-    };
+    let newMessages = old.messages.map<Text, List.List<OldMessage>, List.List<NewMessage>>(
+      func(_roomId, oldMsgList) {
+        oldMsgList.map<OldMessage, NewMessage>(
+          func(oldMsg) { { oldMsg with nonce = null } }
+        );
+      }
+    );
+
+    { messages = newMessages };
   };
 };

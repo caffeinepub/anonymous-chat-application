@@ -1,57 +1,75 @@
 {
   "kind": "coverage_report",
   "version": "1.0",
-  "generatedAt": "2026-02-08T06:13:43.205Z",
+  "generatedAt": "2026-02-10T07:21:31.854Z",
   "sources": {
     "buildRequest": true,
     "implementationPlan": true
   },
   "requirements": {
     "total": 4,
-    "implemented": 2,
+    "implemented": 4,
     "items": [
       {
         "id": "REQ-1",
-        "summary": "Remove the requirement for Internet Identity / AccessControl \"#user\" permission for core chat operations so that any caller can create rooms, read messages, and send messages using only a nickname.",
-        "status": "unknown",
-        "plannedFiles": [],
-        "matchedFiles": []
+        "summary": "Ensure all roomId values are normalized consistently (trimmed) across the chat UI and React Query hooks so that sending, fetching, editing, reacting, and deleting messages all target the exact same backend room key and React Query cache key.",
+        "status": "implemented",
+        "plannedFiles": [
+          "frontend/src/utils/roomId.ts",
+          "frontend/src/App.tsx",
+          "frontend/src/components/WelcomeScreen.tsx",
+          "frontend/src/components/ChatRoom.tsx",
+          "frontend/src/hooks/useQueries.ts"
+        ],
+        "matchedFiles": [
+          "frontend/src/utils/roomId.ts",
+          "frontend/src/App.tsx",
+          "frontend/src/components/WelcomeScreen.tsx",
+          "frontend/src/components/ChatRoom.tsx",
+          "frontend/src/hooks/useQueries.ts"
+        ]
       },
       {
         "id": "REQ-2",
-        "summary": "Add backend-side validation for guest identity inputs so nickname-based usage is safe and consistent: require a non-empty nickname, trim whitespace, and enforce a reasonable max length consistent with the frontend (20 chars).",
-        "status": "unknown",
-        "plannedFiles": [],
-        "matchedFiles": []
-      },
-      {
-        "id": "REQ-3",
-        "summary": "Update frontend room create/join and message send flows to work in guest mode (anonymous actor) without requiring Internet Identity, and ensure errors are surfaced as clear guest-friendly messages instead of generic failures.",
+        "summary": "Fix duplicate message creation by making sendMessage idempotent across retries and UI double-submission: add a client-generated message nonce to the sendMessage call and have the backend deduplicate repeated sends with the same nonce per room, returning the originally-created messageId instead of creating a second message.",
         "status": "implemented",
         "plannedFiles": [
-          "frontend/src/components/WelcomeScreen.tsx",
+          "frontend/src/utils/messageNonce.ts",
           "frontend/src/hooks/useQueries.ts",
           "frontend/src/components/ChatRoom.tsx"
         ],
         "matchedFiles": [
-          "frontend/src/components/WelcomeScreen.tsx",
+          "frontend/src/utils/messageNonce.ts",
+          "frontend/src/hooks/useQueries.ts",
+          "frontend/src/components/ChatRoom.tsx"
+        ]
+      },
+      {
+        "id": "REQ-3",
+        "summary": "Improve delete-message reliability and user feedback: (1) prevent delete from being attempted against optimistic/temporary message IDs, (2) show a clear English error when delete returns false due to ownership mismatch (user can only delete their own messages), and (3) automatically refetch messages after delete success/failure to resync UI state.",
+        "status": "implemented",
+        "plannedFiles": [
+          "frontend/src/components/MessageBubble.tsx",
+          "frontend/src/hooks/useQueries.ts",
+          "frontend/src/components/ChatRoom.tsx"
+        ],
+        "matchedFiles": [
+          "frontend/src/components/MessageBubble.tsx",
           "frontend/src/hooks/useQueries.ts",
           "frontend/src/components/ChatRoom.tsx"
         ]
       },
       {
         "id": "REQ-4",
-        "summary": "Fix the \"unable to send or receive messages\" failure mode by aligning frontend expectations with backend behavior (backend traps on failure; frontend should not rely on sentinel return values like messageId === 0n).",
+        "summary": "Add targeted diagnostics (console-only) for duplicate send and delete failures: log a structured console group when sendMessage or deleteMessage fails or returns an unexpected result, including normalized roomId, messageId, whether the message was optimistic, and any available IC reject details, without logging message content.",
         "status": "implemented",
         "plannedFiles": [
-          "frontend/src/hooks/useQueries.ts",
-          "frontend/src/utils/chatErrorMessages.ts",
-          "frontend/src/components/ChatRoom.tsx"
+          "frontend/src/utils/chatOperationErrors.ts",
+          "frontend/src/hooks/useQueries.ts"
         ],
         "matchedFiles": [
-          "frontend/src/hooks/useQueries.ts",
-          "frontend/src/utils/chatErrorMessages.ts",
-          "frontend/src/components/ChatRoom.tsx"
+          "frontend/src/utils/chatOperationErrors.ts",
+          "frontend/src/hooks/useQueries.ts"
         ]
       }
     ]
@@ -63,14 +81,19 @@
     "feature_evidence.json",
     "frontend-file-summaries.txt",
     "frontend-implementation-plan.json",
+    "frontend/src/App.tsx",
     "frontend/src/backend.d.ts",
     "frontend/src/backend.ts",
     "frontend/src/components/ChatRoom.tsx",
+    "frontend/src/components/MessageBubble.tsx",
+    "frontend/src/components/VideoRecorder.tsx",
     "frontend/src/components/WelcomeScreen.tsx",
     "frontend/src/declarations/backend.did.d.ts",
     "frontend/src/declarations/backend.did.js",
     "frontend/src/hooks/useQueries.ts",
-    "frontend/src/utils/chatErrorMessages.ts",
+    "frontend/src/utils/chatOperationErrors.ts",
+    "frontend/src/utils/messageNonce.ts",
+    "frontend/src/utils/roomId.ts",
     "project_state.json",
     "scratch/component-selection.json",
     "spec.md",

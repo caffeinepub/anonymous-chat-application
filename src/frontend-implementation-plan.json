@@ -1,58 +1,113 @@
 {
   "kind": "implementation_plan",
   "version": "1.0",
-  "title": "Guest-mode rooms and reliable messaging error handling (frontend)",
+  "title": "Fix roomId normalization, idempotent sending, and delete reliability in chat UI",
   "requirements": [
     {
-      "id": "REQ-3",
-      "summary": "Update room create/join and chat send flows to work for guest (anonymous) usage with nickname-only, surfacing user-friendly errors without requiring Internet Identity.",
+      "id": "REQ-1",
+      "summary": "Normalize roomId (trim) everywhere in chat UI and React Query keys so all message operations share the same backend room key and cache key.",
       "acceptanceCriteria": [
-        "From a fresh browser session with no Internet Identity login, the Welcome screen allows entering a nickname + room code and successfully creating a room.",
-        "From a fresh browser session with no Internet Identity login, the Welcome screen allows entering a nickname + join code and successfully joining an existing room.",
-        "After joining as a guest, sending a text message succeeds and the message appears in the chat UI.",
-        "If the backend rejects an operation (e.g., room does not exist, empty nickname), the UI displays an English, user-friendly error message (via existing sanitization) and does not get stuck in a loading state."
+        "When joining/creating a room with leading/trailing spaces in the room code, messages are sent to and fetched from a single consistent room (no split history).",
+        "Deleting a message succeeds in the same room where it was created, regardless of whether the room code originally contained leading/trailing whitespace.",
+        "React Query cache keys for messages and all message mutations use the same normalized roomId value (no duplicate caches for the same room)."
       ],
       "file_operations": [
         {
-          "path": "frontend/src/components/WelcomeScreen.tsx",
-          "operation": "modify",
-          "description": "Ensure create/join flows are fully guest-friendly: validate nickname (trim, non-empty, max 20), avoid any UI assumptions that login is required, and rely on caught/trapped backend errors sanitized via sanitizeChatError for user-facing messaging."
+          "path": "frontend/src/utils/roomId.ts",
+          "operation": "create",
+          "description": "Add a small utility (e.g., normalizeRoomId) that trims/normalizes roomId strings and can be reused by UI components and React Query hooks."
         },
         {
-          "path": "frontend/src/hooks/useQueries.ts",
+          "path": "frontend/src/App.tsx",
           "operation": "modify",
-          "description": "Align createRoom and sendMessage mutations with guest-mode behavior: keep nickname trimming/validation consistent (max 20), and ensure errors are surfaced by throwing (to be sanitized) rather than interpreting backend return-value sentinels."
+          "description": "Ensure the app-level room selection state stores and passes only the normalized (trimmed) roomId to ChatRoom to prevent split room histories due to whitespace."
+        },
+        {
+          "path": "frontend/src/components/WelcomeScreen.tsx",
+          "operation": "modify",
+          "description": "Centralize join/create room code normalization via the shared roomId normalizer so the value passed to onJoinRoom is consistently normalized across flows."
         },
         {
           "path": "frontend/src/components/ChatRoom.tsx",
           "operation": "modify",
-          "description": "Add/ensure pre-send guest validation for nickname (trim, non-empty, max 20) before attempting send/edit, and keep failure handling retryable with sanitized English messaging (inline/toast) without leaving the UI in a stuck state."
+          "description": "Normalize the incoming roomId prop for all hook calls and user actions (send/edit/react/delete) so all operations target the same normalized roomId."
+        },
+        {
+          "path": "frontend/src/hooks/useQueries.ts",
+          "operation": "modify",
+          "description": "Update all React Query queryKey usage and all mutation/query calls to consistently use the normalized roomId (messages query, roomExists query, send/edit/delete/reaction mutations) so there are no duplicate caches for whitespace-variant room IDs."
+        }
+      ]
+    },
+    {
+      "id": "REQ-2",
+      "summary": "Prevent duplicate message creation from retries/double-submit by adding a client-generated nonce to each send action and using it consistently across retries and rapid re-submits.",
+      "acceptanceCriteria": [
+        "If the frontend retries a send due to transient errors, the backend creates at most one message for that user action and returns the same messageId for subsequent attempts using the same nonce.",
+        "If the user triggers send twice quickly for the same composed message payload (e.g., Enter + click, or double click), at most one message is persisted and displayed (no duplicates).",
+        "Existing message sending continues to work for text, image, video, and audio payloads."
+      ],
+      "file_operations": [
+        {
+          "path": "frontend/src/utils/messageNonce.ts",
+          "operation": "create",
+          "description": "Add a utility to generate a client message nonce (e.g., cryptographically-random when available, otherwise a robust fallback) that can be attached to optimistic messages and sendMessage calls."
+        },
+        {
+          "path": "frontend/src/hooks/useQueries.ts",
+          "operation": "modify",
+          "description": "Extend useSendMessage variables to accept a nonce, pass that nonce to the backend sendMessage call, reuse the same nonce across retryWithBackoff attempts, and de-duplicate UI reconciliation when the same messageId is returned for a resent nonce (remove/merge optimistic duplicates rather than displaying two)."
+        },
+        {
+          "path": "frontend/src/components/ChatRoom.tsx",
+          "operation": "modify",
+          "description": "Generate exactly one nonce per user send action and pass it into useSendMessage; also guard against UI double-submission (e.g., ignore Enter/click while a send is already in-flight for the current compose action) so rapid double triggers reuse/prevent duplicate sends for the same payload."
+        }
+      ]
+    },
+    {
+      "id": "REQ-3",
+      "summary": "Make delete more reliable: disable delete for optimistic messages, show ownership-specific error when backend returns false, and refetch messages after delete attempts to resync state.",
+      "acceptanceCriteria": [
+        "The Delete action is disabled/hidden for optimistic (client-only) messages that do not yet have a real backend messageId.",
+        "If a delete attempt fails because the backend returns false (e.g., message not owned by the current userId), the UI shows an English error indicating the user can only delete their own messages (and does not misleadingly imply a system failure).",
+        "After a delete attempt (success or failure), the messages list is refetched/invalidated and reflects the backend source of truth (no ghost messages or missing messages due to optimistic cache drift)."
+      ],
+      "file_operations": [
+        {
+          "path": "frontend/src/components/MessageBubble.tsx",
+          "operation": "modify",
+          "description": "Hide/disable the Delete action for optimistic messages (e.g., when message carries an isOptimistic flag) so the UI never attempts deletion against client-only/temporary IDs."
+        },
+        {
+          "path": "frontend/src/hooks/useQueries.ts",
+          "operation": "modify",
+          "description": "Improve useDeleteMessage: normalize roomId, treat a backend false return as an ownership/authorization-style failure with a clear English message ('You can only delete your own messages.'), and ensure messages are invalidated/refetched after both success and failure to resync the UI with backend truth."
+        },
+        {
+          "path": "frontend/src/components/ChatRoom.tsx",
+          "operation": "modify",
+          "description": "Ensure delete UI flow respects optimistic message constraints (do not open/confirm delete for optimistic entries) and surfaces the improved English ownership error returned from the delete mutation; keep post-delete list resync behavior consistent with updated hook invalidation."
         }
       ]
     },
     {
       "id": "REQ-4",
-      "summary": "Fix messaging failures by handling backend traps via caught errors (no sentinel return-value checks) and keeping message fetching resilient with retry/polling behavior.",
+      "summary": "Add console-only structured diagnostics for send/delete failures and unexpected results without logging message content.",
       "acceptanceCriteria": [
-        "Sending a message no longer checks for messageId === 0n as a failure signal if the backend never returns 0n; failures are handled through caught errors and sanitized messaging.",
-        "When sendMessage fails (e.g., room deleted/does not exist), the UI shows 'Unable to send message. Please try again.' (or another appropriate existing sanitized message) and allows retrying.",
-        "Message fetching failures do not permanently block the chat view; retry/backoff behavior remains in place where currently implemented."
+        "On send failure or suspected duplicate (same nonce resent), the console includes a structured log group with operation name, normalized roomId, nonce, and IC reject details when available, without logging message text/media URLs.",
+        "On delete failure, the console includes a structured log group with operation name, normalized roomId, messageId, isOptimistic flag, backend result (false/exception), and IC reject details when available."
       ],
       "file_operations": [
         {
+          "path": "frontend/src/utils/chatOperationErrors.ts",
+          "operation": "modify",
+          "description": "Enhance structured console diagnostics to support console.group/console.groupCollapsed logging for send/delete operations, including normalized roomId, nonce/messageId, optimistic flag, sanitized error message, and IC reject details when available (without logging message content)."
+        },
+        {
           "path": "frontend/src/hooks/useQueries.ts",
           "operation": "modify",
-          "description": "Remove messageId === 0n failure checks in useSendMessage; treat failures exclusively as thrown errors (traps/rejects) and continue to sanitize and rethrow for the UI. Also adjust useMessages polling/refetchInterval behavior so transient errors do not permanently stop background refresh."
-        },
-        {
-          "path": "frontend/src/utils/chatErrorMessages.ts",
-          "operation": "modify",
-          "description": "Review and, if needed, refine sanitizeChatError mappings so send failures resulting from trapped backend errors consistently produce guest-friendly English messages (e.g., 'Unable to send message. Please try again.')."
-        },
-        {
-          "path": "frontend/src/components/ChatRoom.tsx",
-          "operation": "modify",
-          "description": "Ensure the chat UI does not rely on sentinel values for send success/failure; on send failure, show the existing sanitized message and keep the retry path usable (e.g., preserve unsent payload / allow resend)."
+          "description": "Wire the enhanced diagnostics into useSendMessage and useDeleteMessage: log grouped diagnostics on send failures, suspected duplicates (same nonce leading to an already-present messageId), and delete failures/false results, including normalized roomId and IC reject details when available, without logging message content."
         }
       ]
     }

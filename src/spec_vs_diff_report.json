@@ -1,59 +1,92 @@
 {
   "kind": "spec_vs_diff_report",
   "version": "1.0",
-  "generatedAt": "2026-02-08T06:13:43.203Z",
-  "summary": "Most guest-mode and error-handling changes appear implemented (nickname validation, frontend flows, and removal of sentinel failure checks), but the diff evidence is insufficient or conflicting for a couple of key requirements/constraints—particularly admin-only restriction on maintenance operations and several unrequested feature/architecture changes (including edits to immutable paths and media/sticker behavior).",
+  "generatedAt": "2026-02-10T07:21:31.852Z",
+  "summary": "Diff implements roomId trimming utilities and applies normalization in major frontend entry points and hooks, adds client-side nonce generation and passes nonce through the send flow, and adds a nonce field (plus migration) to backend message types. However, the diff summary does not provide evidence that the backend actually deduplicates sends by nonce, nor enough concrete evidence that delete refetching + ownership-specific UI messaging and the requested structured diagnostics for send/delete are fully implemented. Several unrelated changes (GIF/stickers, QueryClient tuning, access control init behavior, reaction system fixes, styling/viewport work) appear outside the BuildRequest scope.",
   "missing_requirements": [
     {
-      "id": "REQ-1",
-      "requirement": "Admin-only operations (e.g., pruneExpiredMessages) remain restricted to admins.",
-      "reason": "In the shown backend snippet, `pruneExpiredMessages` is a public shared function with no visible authorization/admin guard. If authorization exists elsewhere, it is not evidenced in the diff summary/truncated content.",
+      "id": "REQ-2",
+      "requirement": "Backend deduplicates repeated sendMessage calls using a client-generated nonce per room and returns the originally-created messageId instead of creating duplicates.",
+      "reason": "The diff shows a new optional `nonce` field added to backend message types and a migration to backfill `nonce = null`, and the frontend generates/passes a nonce; but there is no diff evidence showing sendMessage backend logic that checks (roomId, nonce) for an existing message and returns the existing id rather than creating a new message.",
       "evidence": [
-        "backend/main.mo"
+        "backend/main.mo",
+        "backend/migration.mo",
+        "frontend/src/utils/messageNonce.ts",
+        "frontend/src/components/ChatRoom.tsx",
+        "frontend/src/hooks/useQueries.ts"
+      ]
+    },
+    {
+      "id": "REQ-3",
+      "requirement": "After a delete attempt (success or failure), automatically refetch/invalidate messages to resync UI state; and show a clear English error specifically when delete returns false due to ownership mismatch.",
+      "reason": "The diff provides evidence of an `isOptimistic` flag check in the message UI, but the provided/truncated snippets do not show delete mutation handling that (a) distinguishes backend `false` (ownership mismatch) from other failures with the specified user-facing message, and (b) invalidates/refetches messages after both success and failure.",
+      "evidence": [
+        "frontend/src/components/MessageBubble.tsx",
+        "frontend/src/hooks/useQueries.ts (truncated)"
+      ]
+    },
+    {
+      "id": "REQ-4",
+      "requirement": "Structured console-only diagnostics for send/delete failures/unexpected results including normalized roomId, nonce (send), messageId + isOptimistic (delete), backend result, and IC reject details; without logging message content.",
+      "reason": "A generic console.group-based logger is added, but the diff summary does not show the specific send/delete call sites emitting the required structured groups with the required fields (normalized roomId/nonce/messageId/isOptimistic/backend result) and explicitly avoiding logging message content.",
+      "evidence": [
+        "frontend/src/utils/chatOperationErrors.ts",
+        "frontend/src/hooks/useQueries.ts (truncated)",
+        "frontend/src/components/ChatRoom.tsx (truncated)"
       ]
     }
   ],
   "hallucinated_features": [
     {
-      "description": "Modified an explicitly immutable file path (`frontend/src/hooks/useActor.ts`).",
-      "reason": "BuildRequest constraints forbid editing `frontend/src/hooks/useActor.ts`, but the diff summary indicates it was modified.",
+      "description": "GIF/sticker system changes including Tenor API integration and persisting stickers as base64-encoded bytes with reconstruction of ExternalBlob on selection.",
+      "reason": "Not requested by any REQ; unrelated to duplicate send, delete reliability, roomId normalization, or diagnostics constraints.",
       "evidence": [
-        "frontend-file-summaries.txt"
+        "frontend-file-summaries.txt (MediaPicker description)"
       ]
     },
     {
-      "description": "Large media/sticker/GIF-related feature changes (e.g., Tenor API integration and persisting stickers as base64 bytes).",
-      "reason": "Not requested by any REQ; the BuildRequest focuses on guest nickname auth removal and restoring messaging/error handling, not new media integrations or storage format changes.",
+      "description": "Global styling and viewport behavior changes (OKLCH theme, iOS/Android viewport fixes, safe-area support, input font-size fixes).",
+      "reason": "Not requested; outside the specified chat send/delete/roomId/diagnostics scope.",
       "evidence": [
-        "frontend-file-summaries.txt",
-        "frontend/src/components/MediaPicker.tsx"
+        "frontend-file-summaries.txt (frontend/src/index.css description)"
       ]
     },
     {
-      "description": "Backend state schema migration removing `userProfiles` from stable state.",
-      "reason": "Not explicitly required by the BuildRequest; guest mode can be supported without necessarily removing stored user profiles. This is a state/schema change beyond the stated requirements (even if technically permissible when needed).",
+      "description": "Actor initialization behavior change: calling _initializeAccessControlWithSecret for both authenticated and anonymous users with non-blocking error handling.",
+      "reason": "Not requested; BuildRequest explicitly limits scope and does not mention access control initialization changes.",
       "evidence": [
-        "backend/migration.mo"
+        "frontend-file-summaries.txt (frontend/src/hooks/useActor.ts description)"
       ]
     },
     {
-      "description": "Changes to global styling and mobile viewport fixes (OKLCH theme, iOS/Android viewport adjustments).",
-      "reason": "Not requested by any REQ; unrelated to guest access or messaging error handling.",
+      "description": "React Query QueryClient configuration overhaul (aggressive caching, retry/backoff, stale-time/network mode tuning).",
+      "reason": "Not requested; REQs only require consistent cache keys and refetch after delete attempts, not global query client reconfiguration.",
       "evidence": [
-        "frontend-file-summaries.txt",
-        "frontend/src/index.css"
+        "frontend-file-summaries.txt (frontend/src/main.tsx description)"
+      ]
+    },
+    {
+      "description": "Backend reaction system fix (persisting reaction additions/removals using List.append and mapping changes).",
+      "reason": "Not requested by the BuildRequest; scope is duplicate sends + deletion issues + roomId normalization + diagnostics.",
+      "evidence": [
+        "frontend-file-summaries.txt (backend/main.mo description)"
       ]
     }
   ],
-  "confidence": 0.63,
+  "confidence": 0.62,
   "changed_files": [
     "backend/main.mo",
     "backend/migration.mo",
     "frontend-file-summaries.txt",
+    "frontend/src/App.tsx",
     "frontend/src/components/ChatRoom.tsx",
+    "frontend/src/components/MessageBubble.tsx",
+    "frontend/src/components/VideoRecorder.tsx",
     "frontend/src/components/WelcomeScreen.tsx",
     "frontend/src/hooks/useQueries.ts",
-    "frontend/src/utils/chatErrorMessages.ts",
+    "frontend/src/utils/chatOperationErrors.ts",
+    "frontend/src/utils/messageNonce.ts",
+    "frontend/src/utils/roomId.ts",
     "project_state.json"
   ]
 }

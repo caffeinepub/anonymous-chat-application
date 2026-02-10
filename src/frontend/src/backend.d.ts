@@ -23,10 +23,14 @@ export interface MessageView {
     audioUrl?: ExternalBlob;
     imageUrl?: ExternalBlob;
     isEdited: boolean;
+    nonce?: string;
     timestamp: Time;
     replyToId?: bigint;
     videoUrl?: ExternalBlob;
     reactions: Array<Reaction>;
+}
+export interface UserProfile {
+    nickname: string;
 }
 export interface Reaction {
     userId: string;
@@ -43,12 +47,16 @@ export interface backendInterface {
     createRoom(joinCode: string): Promise<string>;
     deleteMessage(roomId: string, messageId: bigint, userId: string): Promise<boolean>;
     editMessage(roomId: string, messageId: bigint, userId: string, newContent: string, newImage: ExternalBlob | null, newVideo: ExternalBlob | null, newAudio: ExternalBlob | null): Promise<boolean>;
+    fetchMessagesAfterId(roomId: string, lastId: bigint): Promise<Array<MessageView>>;
+    getCallerUserProfile(): Promise<UserProfile | null>;
     getCallerUserRole(): Promise<UserRole>;
     getMessageTTL(): Promise<Time>;
     getMessages(roomId: string): Promise<Array<MessageView>>;
+    getUserProfile(user: Principal): Promise<UserProfile | null>;
     isCallerAdmin(): Promise<boolean>;
     pruneExpiredMessages(): Promise<void>;
     removeReaction(roomId: string, messageId: bigint, userId: string, emoji: string): Promise<boolean>;
     roomExists(roomId: string): Promise<boolean>;
-    sendMessage(roomId: string, content: string, nickname: string, userId: string, replyToId: bigint | null, image: ExternalBlob | null, video: ExternalBlob | null, audio: ExternalBlob | null): Promise<bigint>;
+    saveCallerUserProfile(profile: UserProfile): Promise<void>;
+    sendMessage(roomId: string, content: string, nickname: string, userId: string, replyToId: bigint | null, image: ExternalBlob | null, video: ExternalBlob | null, audio: ExternalBlob | null, nonce: string): Promise<bigint>;
 }
