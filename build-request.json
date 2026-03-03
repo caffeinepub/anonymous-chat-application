@@ -1,0 +1,39 @@
+{
+  "kind": "build_request",
+  "title": "Remove GIF and sticker options from chat composer",
+  "priority": "normal",
+  "requirements": [
+    {
+      "id": "REQ-1",
+      "text": "Remove the GIF and sticker selection option from the chat composer UI. Delete or disable the MediaPicker component (frontend/src/components/MediaPicker.tsx) and remove any button, tab, or trigger that opens it within ChatRoom.tsx. Ensure no GIF/sticker UI element remains visible in the message input area.",
+      "target": "frontend",
+      "source": {
+        "messageIds": [
+          "msg-14"
+        ],
+        "quotes": [
+          "remove the option of gifs and stickers"
+        ]
+      },
+      "acceptanceCriteria": [
+        "No GIF button or sticker button is visible in the chat composer or anywhere in the chat room UI",
+        "The MediaPicker component is no longer rendered or accessible",
+        "Removing the GIF/sticker option does not break other media upload features (images, audio, video)",
+        "No console errors related to the removed MediaPicker component"
+      ]
+    }
+  ],
+  "constraints": [
+    "Do not remove or break other media attachment features (image upload, audio recording, video recording/upload)",
+    "Do not modify immutable frontend paths"
+  ],
+  "nonGoals": [
+    "Removing backend support for any media types",
+    "Changes to emoji picker functionality",
+    "Any changes to the room creation or joining flow"
+  ],
+  "imageRequirements": {
+    "required": [],
+    "edits": []
+  }
+}

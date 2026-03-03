@@ -1,0 +1,29 @@
+{
+  "kind": "implementation_plan",
+  "version": "1.0",
+  "title": "Remove GIF and sticker options from chat composer",
+  "requirements": [
+    {
+      "id": "REQ-1",
+      "summary": "Remove the GIF and sticker selection option from the chat composer UI by eliminating the MediaPicker component and its triggers",
+      "acceptanceCriteria": [
+        "No GIF button or sticker button is visible in the chat composer or anywhere in the chat room UI",
+        "The MediaPicker component is no longer rendered or accessible",
+        "Removing the GIF/sticker option does not break other media upload features (images, audio, video)",
+        "No console errors related to the removed MediaPicker component"
+      ],
+      "file_operations": [
+        {
+          "path": "frontend/src/components/ChatRoom.tsx",
+          "operation": "modify",
+          "description": "Remove all references to MediaPicker component including import statement, state management for media picker visibility, button/trigger that opens the MediaPicker, and the MediaPicker component render. Ensure that other media attachment buttons (image upload, audio recording, video recording/upload) remain functional and accessible. Verify that the message composer layout remains intact after removing the GIF/sticker button."
+        },
+        {
+          "path": "frontend/src/components/MediaPicker.tsx",
+          "operation": "delete",
+          "description": "Delete the MediaPicker component file entirely as it is no longer needed. This component provided GIF selection via Tenor API and custom sticker uploads, which are being removed per the requirement."
+        }
+      ]
+    }
+  ]
+}

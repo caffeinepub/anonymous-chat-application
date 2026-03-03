@@ -1,0 +1,42 @@
+{
+  "kind": "coverage_report",
+  "version": "1.0",
+  "generatedAt": "2026-03-03T08:06:52.773Z",
+  "sources": {
+    "buildRequest": true,
+    "implementationPlan": true
+  },
+  "requirements": {
+    "total": 1,
+    "implemented": 1,
+    "items": [
+      {
+        "id": "REQ-1",
+        "summary": "Remove the GIF and sticker selection option from the chat composer UI. Delete or disable the MediaPicker component (frontend/src/components/MediaPicker.tsx) and remove any button, tab, or trigger that opens it within ChatRoom.tsx. Ensure no GIF/sticker UI element remains visible in the message input area.",
+        "status": "implemented",
+        "plannedFiles": [
+          "frontend/src/components/ChatRoom.tsx",
+          "frontend/src/components/MediaPicker.tsx"
+        ],
+        "matchedFiles": [
+          "frontend/src/components/ChatRoom.tsx",
+          "frontend/src/components/MediaPicker.tsx"
+        ]
+      }
+    ]
+  },
+  "changedFiles": [
+    "build-request.json",
+    "build-template/README.md",
+    "caffeine.lock.json",
+    "feature_evidence.json",
+    "frontend-file-summaries.txt",
+    "frontend-implementation-plan.json",
+    "frontend/src/components/ChatRoom.tsx",
+    "frontend/src/components/MediaPicker.tsx",
+    "project_state.json",
+    "scratch/component-selection.json",
+    "spec.md",
+    "spec_vs_diff_report.json"
+  ]
+}

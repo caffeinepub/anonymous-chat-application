@@ -1,0 +1,71 @@
+import type { Principal } from "@icp-sdk/core/principal";
+export interface Some<T> {
+    __kind__: "Some";
+    value: T;
+}
+export interface None {
+    __kind__: "None";
+}
+export type Option<T> = Some<T> | None;
+export class ExternalBlob {
+    getBytes(): Promise<Uint8Array<ArrayBuffer>>;
+    getDirectURL(): string;
+    static fromURL(url: string): ExternalBlob;
+    static fromBytes(blob: Uint8Array<ArrayBuffer>): ExternalBlob;
+    withUploadProgress(onProgress: (percentage: number) => void): ExternalBlob;
+}
+export interface MediaFile {
+    originalName: string;
+    contentType: string;
+    file: ExternalBlob;
+}
+export type Time = bigint;
+export interface MessageView {
+    id: bigint;
+    content: string;
+    nickname: string;
+    audio?: MediaFile;
+    video?: MediaFile;
+    isEdited: boolean;
+    nonce?: string;
+    timestamp: Time;
+    image?: MediaFile;
+    replyToId?: bigint;
+    reactions: Array<Reaction>;
+}
+export interface UserProfile {
+    nickname: string;
+}
+export interface Reaction {
+    userId: string;
+    emoji: string;
+}
+export enum UserRole {
+    admin = "admin",
+    user = "user",
+    guest = "guest"
+}
+export interface backendInterface {
+    addReaction(roomId: string, messageId: bigint, userId: string, emoji: string): Promise<boolean>;
+    assignCallerUserRole(user: Principal, role: UserRole): Promise<void>;
+    createRoom(joinCode: string, nickname: string): Promise<{
+        joinCode: string;
+    }>;
+    deleteMessage(roomId: string, messageId: bigint): Promise<boolean>;
+    editMessage(roomId: string, messageId: bigint, nickname: string, newContent: string, newImage: MediaFile | null, newVideo: MediaFile | null, newAudio: MediaFile | null): Promise<boolean>;
+    fetchMessagesAfterId(roomId: string, lastId: bigint): Promise<Array<MessageView>>;
+    getCallerUserProfile(): Promise<UserProfile | null>;
+    getCallerUserRole(): Promise<UserRole>;
+    getMessageTTL(): Promise<Time>;
+    getMessages(roomId: string): Promise<Array<MessageView>>;
+    getUserProfile(user: Principal): Promise<UserProfile | null>;
+    isCallerAdmin(): Promise<boolean>;
+    joinRoom(joinCode: string, nickname: string): Promise<{
+        nickname: string;
+    }>;
+    pruneExpiredMessages(): Promise<void>;
+    removeReaction(roomId: string, messageId: bigint, userId: string, emoji: string): Promise<boolean>;
+    roomExists(roomId: string): Promise<boolean>;
+    saveCallerUserProfile(profile: UserProfile): Promise<void>;
+    sendMessage(roomId: string, content: string, nickname: string, replyToId: bigint | null, image: MediaFile | null, video: MediaFile | null, audio: MediaFile | null, nonce: string): Promise<bigint>;
+}

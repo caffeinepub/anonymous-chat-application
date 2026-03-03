@@ -1,0 +1,25 @@
+{
+  "schemaVersion": "1.0.0",
+  "projectStateVersion": 3,
+  "summary": "A chat/messaging application with room-based communication, nickname system, and no authentication. GIFs and stickers have been removed.",
+  "architectural_notes": [
+    "GIFs and stickers are disabled/removed from the messaging interface"
+  ],
+  "known_issues": [],
+  "isFixRequest": false,
+  "existing_features": [
+    {
+      "id": "feature-remove-the-gif-and-sticker-selection-option-from-the-chat-composer-ui-delete-or-disable-the-mediapicker-component-frontend-src-components-mediapicker-tsx-and-remove-any-button-tab-or-trigger-that-opens-it-within-chatroom-tsx-ensure-no-gif-sticker-ui-element-remains-visible-in-the-message-input-area",
+      "title": "Remove the GIF and sticker selection option from the chat composer UI. Delete or disable the MediaPicker component (frontend/src/components/MediaPicker.tsx) and remove any button, tab, or trigger that opens it within ChatRoom.tsx. Ensure no GIF/sticker UI element remains visible in the message input area.",
+      "reqIds": [
+        "REQ-1"
+      ],
+      "version": 1
+    }
+  ],
+  "new_feature_requests": [],
+  "gameProjectType": "none",
+  "projectName": "Remove GIF and sticker options from chat composer",
+  "clarification_mode": "instant",
+  "clarification_rounds": 0
+}
