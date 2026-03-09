@@ -1,23 +1,31 @@
-import Runtime "mo:core/Runtime";
 import Time "mo:core/Time";
-import List "mo:core/List";
 import Map "mo:core/Map";
 import Set "mo:core/Set";
-import Text "mo:core/Text";
+import List "mo:core/List";
 import Nat "mo:core/Nat";
+import Text "mo:core/Text";
 import Array "mo:core/Array";
 import Principal "mo:core/Principal";
+import Runtime "mo:core/Runtime";
 import Storage "blob-storage/Storage";
 import MixinStorage "blob-storage/Mixin";
-import MixinAuthorization "authorization/MixinAuthorization";
 import AccessControl "authorization/access-control";
-import Migration "migration";
+import MixinAuthorization "authorization/MixinAuthorization";
 
-(with migration = Migration.run)
+
+
 actor {
+  // Initialize the access control system
   let accessControlState = AccessControl.initState();
   include MixinAuthorization(accessControlState);
+
   include MixinStorage();
+
+  public type MediaFile = {
+    file : Storage.ExternalBlob;
+    originalName : Text;
+    contentType : Text;
+  };
 
   public type Message = {
     id : Nat;
@@ -25,12 +33,11 @@ actor {
     timestamp : Time.Time;
     nickname : Text;
     replyToId : ?Nat;
-    imageUrl : ?Storage.ExternalBlob;
-    videoUrl : ?Storage.ExternalBlob;
-    audioUrl : ?Storage.ExternalBlob;
+    image : ?MediaFile;
+    video : ?MediaFile;
+    audio : ?MediaFile;
     isEdited : Bool;
     reactions : List.List<Reaction>;
-    owner : Text;
     nonce : ?Text;
   };
 
@@ -40,12 +47,11 @@ actor {
     timestamp : Time.Time;
     nickname : Text;
     replyToId : ?Nat;
-    imageUrl : ?Storage.ExternalBlob;
-    videoUrl : ?Storage.ExternalBlob;
-    audioUrl : ?Storage.ExternalBlob;
+    image : ?MediaFile;
+    video : ?MediaFile;
+    audio : ?MediaFile;
     isEdited : Bool;
     reactions : [Reaction];
-    owner : Text;
     nonce : ?Text;
   };
 
@@ -60,16 +66,31 @@ actor {
 
   let messageTTL : Time.Time = 24 * 60 * 60 * 1_000_000_000;
   var nextMessageId : Nat = 0;
-
   let activeRooms = Set.empty<Text>();
-  let messages = Map.empty<Text, List.List<Message>>();
+  let persistentMessages = Map.empty<Text, List.List<Message>>();
   let userProfiles = Map.empty<Principal, UserProfile>();
 
+  // User profile management functions
+  public query ({ caller }) func getCallerUserProfile() : async ?UserProfile {
+    userProfiles.get(caller);
+  };
+
+  public query ({ caller }) func getUserProfile(user : Principal) : async ?UserProfile {
+    if (caller != user and not AccessControl.isAdmin(accessControlState, caller)) {
+      Runtime.trap("Unauthorized: Can only view your own profile");
+    };
+    userProfiles.get(user);
+  };
+
+  public shared ({ caller }) func saveCallerUserProfile(profile : UserProfile) : async () {
+    userProfiles.add(caller, profile);
+  };
+
   func ensureRoomMessages(roomId : Text) : List.List<Message> {
-    switch (messages.get(roomId)) {
+    switch (persistentMessages.get(roomId)) {
       case (null) {
         let emptyList = List.empty<Message>();
-        messages.add(roomId, emptyList);
+        persistentMessages.add(roomId, emptyList);
         emptyList;
       };
       case (?msgs) { msgs };
@@ -82,7 +103,8 @@ actor {
     id;
   };
 
-  public query ({ caller }) func roomExists(roomId : Text) : async Bool {
+  public query ({ caller = _ }) func roomExists(roomId : Text) : async Bool {
+    // No authorization needed - anyone can check if a room exists
     let trimmed = roomId.trim(#char ' ');
     trimmed.size() > 0 and activeRooms.contains(trimmed);
   };
@@ -99,12 +121,11 @@ actor {
       timestamp = message.timestamp;
       nickname = message.nickname;
       replyToId = message.replyToId;
-      imageUrl = message.imageUrl;
-      videoUrl = message.videoUrl;
-      audioUrl = message.audioUrl;
+      image = message.image;
+      video = message.video;
+      audio = message.audio;
       isEdited = message.isEdited;
       reactions = message.reactions.toArray();
-      owner = message.owner;
       nonce = message.nonce;
     };
   };
@@ -130,18 +151,34 @@ actor {
     };
   };
 
-  public shared ({ caller }) func createRoom(joinCode : Text) : async Text {
+  public shared ({ caller = _ }) func createRoom(joinCode : Text, nickname : Text) : async { joinCode : Text } {
+    // No authorization needed - anyone including guests can create rooms
     validateJoinCode(joinCode);
+    let validNickname = validateNickname(nickname);
+
     if (activeRooms.contains(joinCode)) {
       Runtime.trap("Room already exists: " # joinCode);
     };
+
     activeRooms.add(joinCode);
-    joinCode;
+
+    { joinCode };
   };
 
-  public query ({ caller }) func getMessages(roomId : Text) : async [MessageView] {
-    validateJoinCode(roomId);
-    switch (messages.get(roomId)) {
+  public shared ({ caller = _ }) func joinRoom(joinCode : Text, nickname : Text) : async { nickname : Text } {
+    // No authorization needed - anyone including guests can join rooms
+    validateJoinCode(joinCode);
+    let validNickname = validateNickname(nickname);
+
+    if (not activeRooms.contains(joinCode)) {
+      Runtime.trap("Room not found: " # joinCode);
+    };
+
+    { nickname = validNickname };
+  };
+
+  func getNonExpiredMessages(roomId : Text) : [MessageView] {
+    switch (persistentMessages.get(roomId)) {
       case (null) { [] };
       case (?msgs) {
         let filteredMsgs = msgs.filter(isNotExpired);
@@ -150,9 +187,16 @@ actor {
     };
   };
 
-  public query ({ caller }) func fetchMessagesAfterId(roomId : Text, lastId : Nat) : async [MessageView] {
+  public query ({ caller = _ }) func getMessages(roomId : Text) : async [MessageView] {
+    // No authorization needed - anyone can view messages
     validateJoinCode(roomId);
-    switch (messages.get(roomId)) {
+    getNonExpiredMessages(roomId);
+  };
+
+  public query ({ caller = _ }) func fetchMessagesAfterId(roomId : Text, lastId : Nat) : async [MessageView] {
+    // No authorization needed - anyone can fetch messages
+    validateJoinCode(roomId);
+    switch (persistentMessages.get(roomId)) {
       case (null) { [] };
       case (?msgs) {
         let filteredMsgs = msgs.filter(
@@ -163,17 +207,17 @@ actor {
     };
   };
 
-  public shared ({ caller }) func sendMessage(
+  public shared ({ caller = _ }) func sendMessage(
     roomId : Text,
     content : Text,
     nickname : Text,
-    userId : Text,
     replyToId : ?Nat,
-    image : ?Storage.ExternalBlob,
-    video : ?Storage.ExternalBlob,
-    audio : ?Storage.ExternalBlob,
+    image : ?MediaFile,
+    video : ?MediaFile,
+    audio : ?MediaFile,
     nonce : Text
   ) : async Nat {
+    // No authorization needed - anyone including guests can send messages
     let validNickname = validateNickname(nickname);
     validateJoinCode(roomId);
 
@@ -190,7 +234,7 @@ actor {
 
     switch (existing) {
       case (?duplicate) {
-        if (duplicate.owner == userId and duplicate.content == content) {
+        if (duplicate.content == content) {
           return duplicate.id;
         };
       };
@@ -205,57 +249,56 @@ actor {
       timestamp = Time.now();
       nickname = validNickname;
       replyToId;
-      imageUrl = image;
-      videoUrl = video;
-      audioUrl = audio;
+      image;
+      video;
+      audio;
       isEdited = false;
       reactions = List.empty<Reaction>();
-      owner = userId;
       nonce = ?nonce;
     };
 
     roomMessages.add(newMessage);
+    persistentMessages.add(roomId, roomMessages);
 
     messageId;
   };
 
-  public shared ({ caller }) func editMessage(
+  public shared ({ caller = _ }) func editMessage(
     roomId : Text,
     messageId : Nat,
-    userId : Text,
+    nickname : Text,
     newContent : Text,
-    newImage : ?Storage.ExternalBlob,
-    newVideo : ?Storage.ExternalBlob,
-    newAudio : ?Storage.ExternalBlob
+    newImage : ?MediaFile,
+    newVideo : ?MediaFile,
+    newAudio : ?MediaFile
   ) : async Bool {
+    // No authorization needed - anyone can edit messages (nickname-based ownership in frontend)
     validateJoinCode(roomId);
-    switch (messages.get(roomId)) {
+    let validNickname = validateNickname(nickname);
+    switch (persistentMessages.get(roomId)) {
       case (null) { false };
       case (?msgs) {
         switch (msgs.find(func(msg) { msg.id == messageId })) {
           case (null) { false };
           case (?targetMsg) {
-            if (targetMsg.owner != userId) {
-              return false;
-            };
-
             let updatedMessages = msgs.map<Message, Message>(
               func(msg) {
                 if (msg.id == messageId) {
                   {
                     msg with
+                    nickname = validNickname;
                     content = newContent;
+                    image = newImage;
+                    video = newVideo;
+                    audio = newAudio;
                     isEdited = true;
-                    imageUrl = newImage;
-                    videoUrl = newVideo;
-                    audioUrl = newAudio;
                   };
                 } else {
                   msg;
                 };
               }
             );
-            messages.add(roomId, updatedMessages);
+            persistentMessages.add(roomId, updatedMessages);
             true;
           };
         };
@@ -263,22 +306,19 @@ actor {
     };
   };
 
-  public shared ({ caller }) func deleteMessage(roomId : Text, messageId : Nat, userId : Text) : async Bool {
+  public shared ({ caller = _ }) func deleteMessage(roomId : Text, messageId : Nat) : async Bool {
+    // No authorization needed - anyone can delete messages (nickname-based ownership in frontend)
     validateJoinCode(roomId);
-    switch (messages.get(roomId)) {
+    switch (persistentMessages.get(roomId)) {
       case (null) { false };
       case (?msgs) {
         switch (msgs.find(func(msg) { msg.id == messageId })) {
           case (null) { false };
-          case (?targetMsg) {
-            if (targetMsg.owner != userId) {
-              return false;
-            };
-
+          case (?_targetMsg) {
             let filteredMessages = msgs.filter(
               func(msg) { msg.id != messageId }
             );
-            messages.add(roomId, filteredMessages);
+            persistentMessages.add(roomId, filteredMessages);
             true;
           };
         };
@@ -286,14 +326,15 @@ actor {
     };
   };
 
-  public shared ({ caller }) func addReaction(
+  public shared ({ caller = _ }) func addReaction(
     roomId : Text,
     messageId : Nat,
     userId : Text,
     emoji : Text
   ) : async Bool {
+    // No authorization needed - anyone can add reactions
     validateJoinCode(roomId);
-    switch (messages.get(roomId)) {
+    switch (persistentMessages.get(roomId)) {
       case (null) { false };
       case (?msgs) {
         let updatedMessages = msgs.map<Message, Message>(
@@ -310,20 +351,21 @@ actor {
             };
           }
         );
-        messages.add(roomId, updatedMessages);
+        persistentMessages.add(roomId, updatedMessages);
         true;
       };
     };
   };
 
-  public shared ({ caller }) func removeReaction(
+  public shared ({ caller = _ }) func removeReaction(
     roomId : Text,
     messageId : Nat,
     userId : Text,
     emoji : Text
   ) : async Bool {
+    // No authorization needed - anyone can remove reactions
     validateJoinCode(roomId);
-    switch (messages.get(roomId)) {
+    switch (persistentMessages.get(roomId)) {
       case (null) { false };
       case (?msgs) {
         let updatedMessages = msgs.map<Message, Message>(
@@ -340,47 +382,34 @@ actor {
             };
           }
         );
-        messages.add(roomId, updatedMessages);
+        persistentMessages.add(roomId, updatedMessages);
         true;
       };
     };
   };
 
-  public query ({ caller }) func getCallerUserProfile() : async ?UserProfile {
-    userProfiles.get(caller);
-  };
-
-  public query ({ caller }) func getUserProfile(user : Principal) : async ?UserProfile {
-    userProfiles.get(user);
-  };
-
-  public shared ({ caller }) func saveCallerUserProfile(profile : UserProfile) : async () {
-    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
-      Runtime.trap("Unauthorized: Only users can save profiles");
-    };
-    userProfiles.add(caller, profile);
-  };
-
-  public query ({ caller }) func getMessageTTL() : async Time.Time {
+  public query ({ caller = _ }) func getMessageTTL() : async Time.Time {
+    // No authorization needed - anyone can query the TTL
     messageTTL;
   };
 
   public shared ({ caller }) func pruneExpiredMessages() : async () {
+    // Admin-only function - system maintenance
     if (not (AccessControl.hasPermission(accessControlState, caller, #admin))) {
-      Runtime.trap("Unauthorized: Only admins can prune messages");
+      Runtime.trap("Unauthorized: Only admins can prune expired messages");
     };
 
     let now = Time.now();
-    for ((roomId, msgList) in messages.entries()) {
+    for ((roomId, msgList) in persistentMessages.entries()) {
       let validMsgs = msgList.filter(func(msg) { now - msg.timestamp <= messageTTL });
       if (validMsgs.size() != msgList.size()) {
-        messages.add(roomId, validMsgs);
+        persistentMessages.add(roomId, validMsgs);
       };
     };
 
-    for ((roomId, msgList) in messages.entries()) {
+    for ((roomId, msgList) in persistentMessages.entries()) {
       if (msgList.size() == 0 and not activeRooms.contains(roomId)) {
-        messages.remove(roomId);
+        persistentMessages.remove(roomId);
       };
     };
   };

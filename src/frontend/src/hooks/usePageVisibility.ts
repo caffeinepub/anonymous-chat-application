@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useEffect, useState } from "react";
 
 /**
  * Hook that tracks document/tab visibility state.
@@ -7,19 +7,19 @@ import { useState, useEffect } from 'react';
 export function usePageVisibility(): boolean {
   const [isVisible, setIsVisible] = useState<boolean>(() => {
     // Initialize with current visibility state
-    if (typeof document === 'undefined') return true;
-    return document.visibilityState === 'visible';
+    if (typeof document === "undefined") return true;
+    return document.visibilityState === "visible";
   });
 
   useEffect(() => {
     const handleVisibilityChange = () => {
-      setIsVisible(document.visibilityState === 'visible');
+      setIsVisible(document.visibilityState === "visible");
     };
 
-    document.addEventListener('visibilitychange', handleVisibilityChange);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
 
     return () => {
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
   }, []);
 

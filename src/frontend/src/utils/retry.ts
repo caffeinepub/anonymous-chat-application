@@ -13,33 +13,34 @@ export function isTransientError(error: unknown): boolean {
 
   // Network/connection errors
   if (
-    lowerMessage.includes('network') ||
-    lowerMessage.includes('fetch') ||
-    lowerMessage.includes('timeout') ||
-    lowerMessage.includes('connection') ||
-    lowerMessage.includes('failed to fetch')
+    lowerMessage.includes("network") ||
+    lowerMessage.includes("fetch") ||
+    lowerMessage.includes("timeout") ||
+    lowerMessage.includes("connection") ||
+    lowerMessage.includes("failed to fetch")
   ) {
     return true;
   }
 
   // IC replica temporary errors
   if (
-    lowerMessage.includes('replica') ||
-    lowerMessage.includes('unavailable') ||
-    lowerMessage.includes('temporary')
+    lowerMessage.includes("replica") ||
+    lowerMessage.includes("unavailable") ||
+    lowerMessage.includes("temporary")
   ) {
     return true;
   }
 
   // Check for IC reject codes that indicate transient issues
-  if (error && typeof error === 'object') {
+  if (error && typeof error === "object") {
     const err = error as Record<string, unknown>;
-    const rejectCode = err.reject_code || (err.error as Record<string, unknown>)?.reject_code;
-    
+    const rejectCode =
+      err.reject_code || (err.error as Record<string, unknown>)?.reject_code;
+
     if (rejectCode) {
       const code = String(rejectCode);
       // SYS_TRANSIENT (1), SYS_UNKNOWN (2) are potentially transient
-      if (code === '1' || code === '2') {
+      if (code === "1" || code === "2") {
         return true;
       }
     }
@@ -58,7 +59,7 @@ export async function retryWithBackoff<T>(
     initialDelayMs?: number;
     maxDelayMs?: number;
     shouldRetry?: (error: unknown) => boolean;
-  } = {}
+  } = {},
 ): Promise<T> {
   const {
     maxAttempts = 3,
@@ -86,11 +87,14 @@ export async function retryWithBackoff<T>(
       }
 
       // Calculate delay with exponential backoff
-      const delay = Math.min(initialDelayMs * Math.pow(2, attempt), maxDelayMs);
-      
-      console.log(`[Retry] Attempt ${attempt + 1}/${maxAttempts} failed, retrying in ${delay}ms...`, error);
-      
-      await new Promise(resolve => setTimeout(resolve, delay));
+      const delay = Math.min(initialDelayMs * 2 ** attempt, maxDelayMs);
+
+      console.log(
+        `[Retry] Attempt ${attempt + 1}/${maxAttempts} failed, retrying in ${delay}ms...`,
+        error,
+      );
+
+      await new Promise((resolve) => setTimeout(resolve, delay));
     }
   }
 

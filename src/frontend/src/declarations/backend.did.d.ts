@@ -11,18 +11,22 @@ import type { IDL } from '@icp-sdk/core/candid';
 import type { Principal } from '@icp-sdk/core/principal';
 
 export type ExternalBlob = Uint8Array;
+export interface MediaFile {
+  'originalName' : string,
+  'contentType' : string,
+  'file' : ExternalBlob,
+}
 export interface MessageView {
   'id' : bigint,
   'content' : string,
   'nickname' : string,
-  'owner' : string,
-  'audioUrl' : [] | [ExternalBlob],
-  'imageUrl' : [] | [ExternalBlob],
+  'audio' : [] | [MediaFile],
+  'video' : [] | [MediaFile],
   'isEdited' : boolean,
   'nonce' : [] | [string],
   'timestamp' : Time,
+  'image' : [] | [MediaFile],
   'replyToId' : [] | [bigint],
-  'videoUrl' : [] | [ExternalBlob],
   'reactions' : Array<Reaction>,
 }
 export interface Reaction { 'userId' : string, 'emoji' : string }
@@ -61,17 +65,17 @@ export interface _SERVICE {
   '_initializeAccessControlWithSecret' : ActorMethod<[string], undefined>,
   'addReaction' : ActorMethod<[string, bigint, string, string], boolean>,
   'assignCallerUserRole' : ActorMethod<[Principal, UserRole], undefined>,
-  'createRoom' : ActorMethod<[string], string>,
-  'deleteMessage' : ActorMethod<[string, bigint, string], boolean>,
+  'createRoom' : ActorMethod<[string, string], { 'joinCode' : string }>,
+  'deleteMessage' : ActorMethod<[string, bigint], boolean>,
   'editMessage' : ActorMethod<
     [
       string,
       bigint,
       string,
       string,
-      [] | [ExternalBlob],
-      [] | [ExternalBlob],
-      [] | [ExternalBlob],
+      [] | [MediaFile],
+      [] | [MediaFile],
+      [] | [MediaFile],
     ],
     boolean
   >,
@@ -82,6 +86,7 @@ export interface _SERVICE {
   'getMessages' : ActorMethod<[string], Array<MessageView>>,
   'getUserProfile' : ActorMethod<[Principal], [] | [UserProfile]>,
   'isCallerAdmin' : ActorMethod<[], boolean>,
+  'joinRoom' : ActorMethod<[string, string], { 'nickname' : string }>,
   'pruneExpiredMessages' : ActorMethod<[], undefined>,
   'removeReaction' : ActorMethod<[string, bigint, string, string], boolean>,
   'roomExists' : ActorMethod<[string], boolean>,
@@ -91,11 +96,10 @@ export interface _SERVICE {
       string,
       string,
       string,
-      string,
       [] | [bigint],
-      [] | [ExternalBlob],
-      [] | [ExternalBlob],
-      [] | [ExternalBlob],
+      [] | [MediaFile],
+      [] | [MediaFile],
+      [] | [MediaFile],
       string,
     ],
     bigint

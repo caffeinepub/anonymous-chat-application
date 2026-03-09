@@ -1,8 +1,8 @@
-import { useState, useRef, useEffect } from 'react';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Video, Square, Play, X, Send, Loader2 } from 'lucide-react';
-import { toast } from 'sonner';
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Loader2, Play, Send, Square, Video, X } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { toast } from "sonner";
 
 interface VideoRecorderProps {
   onSend: (videoBlob: Blob) => void;
@@ -32,7 +32,7 @@ export default function VideoRecorder({ onSend, onClose }: VideoRecorderProps) {
       stopRecording();
       if (recordingTimerRef.current) clearInterval(recordingTimerRef.current);
       if (streamRef.current) {
-        streamRef.current.getTracks().forEach(track => track.stop());
+        for (const track of streamRef.current.getTracks()) track.stop();
       }
       if (recordedUrl) {
         URL.revokeObjectURL(recordedUrl);
@@ -46,13 +46,13 @@ export default function VideoRecorder({ onSend, onClose }: VideoRecorderProps) {
     setPreviewError(false);
 
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ 
-        video: { 
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: {
           width: { ideal: 1280 },
           height: { ideal: 720 },
-          facingMode: 'user'
+          facingMode: "user",
         },
-        audio: true
+        audio: true,
       });
 
       streamRef.current = stream;
@@ -66,13 +66,13 @@ export default function VideoRecorder({ onSend, onClose }: VideoRecorderProps) {
 
       // Determine supported MIME type
       const mimeTypes = [
-        'video/webm;codecs=vp9',
-        'video/webm;codecs=vp8',
-        'video/webm',
-        'video/mp4',
+        "video/webm;codecs=vp9",
+        "video/webm;codecs=vp8",
+        "video/webm",
+        "video/mp4",
       ];
 
-      let selectedMimeType = '';
+      let selectedMimeType = "";
       for (const mimeType of mimeTypes) {
         if (MediaRecorder.isTypeSupported(mimeType)) {
           selectedMimeType = mimeType;
@@ -81,7 +81,7 @@ export default function VideoRecorder({ onSend, onClose }: VideoRecorderProps) {
       }
 
       if (!selectedMimeType) {
-        throw new Error('No supported video format found');
+        throw new Error("No supported video format found");
       }
 
       const mediaRecorder = new MediaRecorder(stream, {
@@ -97,20 +97,22 @@ export default function VideoRecorder({ onSend, onClose }: VideoRecorderProps) {
       };
 
       mediaRecorder.onstop = () => {
-        const blob = new Blob(videoChunksRef.current, { type: selectedMimeType });
+        const blob = new Blob(videoChunksRef.current, {
+          type: selectedMimeType,
+        });
         setRecordedBlob(blob);
-        
+
         // Create preview URL using URL.createObjectURL
         const url = URL.createObjectURL(blob);
         setRecordedUrl(url);
-        
+
         // Stop live preview
         if (videoRef.current) {
           videoRef.current.srcObject = null;
         }
-        
+
         // Stop all tracks
-        stream.getTracks().forEach(track => track.stop());
+        for (const track of stream.getTracks()) track.stop();
         streamRef.current = null;
       };
 
@@ -125,20 +127,20 @@ export default function VideoRecorder({ onSend, onClose }: VideoRecorderProps) {
           const newTime = prev + 1;
           if (newTime >= MAX_DURATION) {
             stopRecording();
-            toast.info('Maximum recording duration reached');
+            toast.info("Maximum recording duration reached");
           }
           return newTime;
         });
       }, 1000);
 
-      toast.success('Recording started');
+      toast.success("Recording started");
     } catch (error) {
-      console.error('Error starting recording:', error);
-      if (error instanceof Error && error.name === 'NotAllowedError') {
+      console.error("Error starting recording:", error);
+      if (error instanceof Error && error.name === "NotAllowedError") {
         setPermissionDenied(true);
-        toast.error('Camera/microphone permission denied');
+        toast.error("Camera/microphone permission denied");
       } else {
-        toast.error('Failed to start recording');
+        toast.error("Failed to start recording");
       }
     } finally {
       setIsInitializing(false);
@@ -149,7 +151,7 @@ export default function VideoRecorder({ onSend, onClose }: VideoRecorderProps) {
     if (mediaRecorderRef.current && isRecording) {
       mediaRecorderRef.current.stop();
       setIsRecording(false);
-      
+
       if (recordingTimerRef.current) {
         clearInterval(recordingTimerRef.current);
         recordingTimerRef.current = null;
@@ -179,36 +181,45 @@ export default function VideoRecorder({ onSend, onClose }: VideoRecorderProps) {
     setRecordingTime(0);
   };
 
-  const handlePreviewError = (e: React.SyntheticEvent<HTMLVideoElement, Event>) => {
-    console.error('Video preview error:', e);
+  const handlePreviewError = (
+    e: React.SyntheticEvent<HTMLVideoElement, Event>,
+  ) => {
+    console.error("Video preview error:", e);
     setPreviewError(true);
   };
 
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
     const secs = seconds % 60;
-    return `${mins}:${secs.toString().padStart(2, '0')}`;
+    return `${mins}:${secs.toString().padStart(2, "0")}`;
   };
 
   return (
     <Card className="w-full max-w-2xl shadow-lg">
       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3">
         <CardTitle className="text-sm font-medium flex items-center gap-2">
-          <img 
-            src="/assets/generated/video-camera-icon-transparent.dim_24x24.png" 
-            alt="Video" 
+          <img
+            src="/assets/generated/video-camera-icon-transparent.dim_24x24.png"
+            alt="Video"
             className="h-5 w-5"
           />
           Video Recording
         </CardTitle>
-        <Button variant="ghost" size="icon" className="h-6 w-6" onClick={onClose}>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-6 w-6"
+          onClick={onClose}
+        >
           <X className="h-4 w-4" />
         </Button>
       </CardHeader>
       <CardContent className="space-y-4">
         {permissionDenied ? (
           <div className="text-center space-y-3 py-4">
-            <p className="text-sm text-destructive">Camera/microphone permission denied</p>
+            <p className="text-sm text-destructive">
+              Camera/microphone permission denied
+            </p>
             <p className="text-xs text-muted-foreground">
               Please allow camera and microphone access in your browser settings
             </p>
@@ -228,13 +239,17 @@ export default function VideoRecorder({ onSend, onClose }: VideoRecorderProps) {
               />
               {previewError && (
                 <div className="absolute inset-0 flex items-center justify-center bg-black/80">
-                  <p className="text-sm text-white">Failed to load video preview</p>
+                  <p className="text-sm text-white">
+                    Failed to load video preview
+                  </p>
                 </div>
               )}
               {isRecording && (
                 <div className="absolute top-4 left-4 flex items-center gap-2 bg-destructive/90 text-destructive-foreground px-3 py-1.5 rounded-full">
                   <div className="h-3 w-3 rounded-full bg-white animate-pulse" />
-                  <span className="text-sm font-mono font-bold">{formatTime(recordingTime)}</span>
+                  <span className="text-sm font-mono font-bold">
+                    {formatTime(recordingTime)}
+                  </span>
                 </div>
               )}
             </div>
@@ -281,17 +296,11 @@ export default function VideoRecorder({ onSend, onClose }: VideoRecorderProps) {
                 </>
               ) : (
                 <>
-                  <Button
-                    onClick={handleCancel}
-                    variant="outline"
-                  >
+                  <Button onClick={handleCancel} variant="outline">
                     <X className="h-4 w-4 mr-2" />
                     Cancel
                   </Button>
-                  <Button
-                    onClick={handleSend}
-                    className="gap-2"
-                  >
+                  <Button onClick={handleSend} className="gap-2">
                     <Send className="h-4 w-4" />
                     Send Video
                   </Button>

@@ -12,14 +12,14 @@ export interface ICRejectDetails {
  * Extract reject details from IC agent errors, checking multiple nested levels
  */
 export function extractICRejectDetails(error: unknown): ICRejectDetails {
-  if (!error || typeof error !== 'object') {
+  if (!error || typeof error !== "object") {
     return {};
   }
 
   const err = error as Record<string, unknown>;
-  
+
   // Direct reject properties
-  if ('reject_code' in err || 'reject_message' in err) {
+  if ("reject_code" in err || "reject_message" in err) {
     return {
       code: err.reject_code ? String(err.reject_code) : undefined,
       message: err.reject_message ? String(err.reject_message) : undefined,
@@ -27,12 +27,14 @@ export function extractICRejectDetails(error: unknown): ICRejectDetails {
   }
 
   // Check nested error property
-  if ('error' in err && err.error && typeof err.error === 'object') {
+  if ("error" in err && err.error && typeof err.error === "object") {
     const nested = err.error as Record<string, unknown>;
-    if ('reject_code' in nested || 'reject_message' in nested) {
+    if ("reject_code" in nested || "reject_message" in nested) {
       return {
         code: nested.reject_code ? String(nested.reject_code) : undefined,
-        message: nested.reject_message ? String(nested.reject_message) : undefined,
+        message: nested.reject_message
+          ? String(nested.reject_message)
+          : undefined,
       };
     }
     // Recursively check deeper nesting
@@ -43,12 +45,14 @@ export function extractICRejectDetails(error: unknown): ICRejectDetails {
   }
 
   // Check for cause property (common in wrapped errors)
-  if ('cause' in err && err.cause && typeof err.cause === 'object') {
+  if ("cause" in err && err.cause && typeof err.cause === "object") {
     const cause = err.cause as Record<string, unknown>;
-    if ('reject_code' in cause || 'reject_message' in cause) {
+    if ("reject_code" in cause || "reject_message" in cause) {
       return {
         code: cause.reject_code ? String(cause.reject_code) : undefined,
-        message: cause.reject_message ? String(cause.reject_message) : undefined,
+        message: cause.reject_message
+          ? String(cause.reject_message)
+          : undefined,
       };
     }
     // Recursively check deeper nesting
@@ -77,7 +81,7 @@ export function getCandidateMessages(error: unknown): string[] {
   }
 
   // String error
-  if (typeof error === 'string') {
+  if (typeof error === "string") {
     messages.push(error);
   }
 
@@ -88,9 +92,9 @@ export function getCandidateMessages(error: unknown): string[] {
   }
 
   // Check for message property in object
-  if (typeof error === 'object' && error !== null) {
+  if (typeof error === "object" && error !== null) {
     const err = error as Record<string, unknown>;
-    if ('message' in err && typeof err.message === 'string') {
+    if ("message" in err && typeof err.message === "string") {
       messages.push(err.message);
     }
   }

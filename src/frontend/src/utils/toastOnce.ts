@@ -2,7 +2,7 @@
  * Toast deduplication utility to prevent multiple toasts for the same error
  */
 
-import { toast } from 'sonner';
+import { toast } from "sonner";
 
 interface ToastRecord {
   key: string;
@@ -18,7 +18,7 @@ const DEDUP_WINDOW_MS = 3000; // 3 seconds
 function cleanupOldToasts() {
   const now = Date.now();
   const cutoff = now - DEDUP_WINDOW_MS;
-  
+
   // Remove toasts older than the dedup window
   while (recentToasts.length > 0 && recentToasts[0].timestamp < cutoff) {
     recentToasts.shift();
@@ -30,7 +30,7 @@ function cleanupOldToasts() {
  */
 function wasRecentlyShown(key: string): boolean {
   cleanupOldToasts();
-  return recentToasts.some(record => record.key === key);
+  return recentToasts.some((record) => record.key === key);
 }
 
 /**
@@ -48,11 +48,11 @@ function recordToast(key: string) {
  */
 export function toastErrorOnce(message: string, key?: string) {
   const toastKey = key || message;
-  
+
   if (wasRecentlyShown(toastKey)) {
     return;
   }
-  
+
   recordToast(toastKey);
   toast.error(message);
 }
@@ -62,11 +62,11 @@ export function toastErrorOnce(message: string, key?: string) {
  */
 export function toastSuccessOnce(message: string, key?: string) {
   const toastKey = key || message;
-  
+
   if (wasRecentlyShown(toastKey)) {
     return;
   }
-  
+
   recordToast(toastKey);
   toast.success(message);
 }
@@ -76,11 +76,11 @@ export function toastSuccessOnce(message: string, key?: string) {
  */
 export function toastInfoOnce(message: string, key?: string) {
   const toastKey = key || message;
-  
+
   if (wasRecentlyShown(toastKey)) {
     return;
   }
-  
+
   recordToast(toastKey);
   toast.info(message);
 }

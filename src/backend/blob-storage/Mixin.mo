@@ -8,7 +8,7 @@ import Storage "Storage";
 import Prim "mo:prim";
 import Runtime "mo:core/Runtime";
 
-mixin() {
+mixin () {
   type ExternalBlob = Storage.ExternalBlob;
 
   transient let _caffeineStorageState : Storage.State = Storage.new();

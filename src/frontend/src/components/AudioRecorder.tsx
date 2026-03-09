@@ -1,8 +1,8 @@
-import { useState, useRef, useEffect } from 'react';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Mic, Square, Play, Pause, X, Send, Loader2 } from 'lucide-react';
-import { toast } from 'sonner';
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Loader2, Mic, Pause, Play, Send, Square, X } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { toast } from "sonner";
 
 interface AudioRecorderProps {
   onSend: (audioBlob: Blob) => void;
@@ -45,23 +45,23 @@ export default function AudioRecorder({ onSend, onClose }: AudioRecorderProps) {
     setPermissionDenied(false);
 
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ 
+      const stream = await navigator.mediaDevices.getUserMedia({
         audio: {
           echoCancellation: true,
           noiseSuppression: true,
           autoGainControl: true,
-        } 
+        },
       });
 
       // Determine supported MIME type
       const mimeTypes = [
-        'audio/webm;codecs=opus',
-        'audio/webm',
-        'audio/ogg;codecs=opus',
-        'audio/mp4',
+        "audio/webm;codecs=opus",
+        "audio/webm",
+        "audio/ogg;codecs=opus",
+        "audio/mp4",
       ];
 
-      let selectedMimeType = '';
+      let selectedMimeType = "";
       for (const mimeType of mimeTypes) {
         if (MediaRecorder.isTypeSupported(mimeType)) {
           selectedMimeType = mimeType;
@@ -70,7 +70,7 @@ export default function AudioRecorder({ onSend, onClose }: AudioRecorderProps) {
       }
 
       if (!selectedMimeType) {
-        throw new Error('No supported audio format found');
+        throw new Error("No supported audio format found");
       }
 
       const mediaRecorder = new MediaRecorder(stream, {
@@ -86,12 +86,14 @@ export default function AudioRecorder({ onSend, onClose }: AudioRecorderProps) {
       };
 
       mediaRecorder.onstop = () => {
-        const blob = new Blob(audioChunksRef.current, { type: selectedMimeType });
+        const blob = new Blob(audioChunksRef.current, {
+          type: selectedMimeType,
+        });
         setRecordedBlob(blob);
         setDuration(recordingTime);
-        
+
         // Stop all tracks
-        stream.getTracks().forEach(track => track.stop());
+        for (const track of stream.getTracks()) track.stop();
       };
 
       mediaRecorder.start();
@@ -105,20 +107,20 @@ export default function AudioRecorder({ onSend, onClose }: AudioRecorderProps) {
           const newTime = prev + 1;
           if (newTime >= MAX_DURATION) {
             stopRecording();
-            toast.info('Maximum recording duration reached');
+            toast.info("Maximum recording duration reached");
           }
           return newTime;
         });
       }, 1000);
 
-      toast.success('Recording started');
+      toast.success("Recording started");
     } catch (error) {
-      console.error('Error starting recording:', error);
-      if (error instanceof Error && error.name === 'NotAllowedError') {
+      console.error("Error starting recording:", error);
+      if (error instanceof Error && error.name === "NotAllowedError") {
         setPermissionDenied(true);
-        toast.error('Microphone permission denied');
+        toast.error("Microphone permission denied");
       } else {
-        toast.error('Failed to start recording');
+        toast.error("Failed to start recording");
       }
     } finally {
       setIsInitializing(false);
@@ -129,7 +131,7 @@ export default function AudioRecorder({ onSend, onClose }: AudioRecorderProps) {
     if (mediaRecorderRef.current && isRecording) {
       mediaRecorderRef.current.stop();
       setIsRecording(false);
-      
+
       if (recordingTimerRef.current) {
         clearInterval(recordingTimerRef.current);
         recordingTimerRef.current = null;
@@ -141,9 +143,12 @@ export default function AudioRecorder({ onSend, onClose }: AudioRecorderProps) {
     if (!recordedBlob) return;
 
     if (previewAudioRef.current) {
-      previewAudioRef.current.play();
+      previewAudioRef.current.play().catch((err) => {
+        console.error("Preview playback failed:", err);
+        setIsPreviewing(false);
+      });
       setIsPreviewing(true);
-      
+
       // Start preview timer
       previewTimerRef.current = setInterval(() => {
         if (previewAudioRef.current) {
@@ -160,10 +165,13 @@ export default function AudioRecorder({ onSend, onClose }: AudioRecorderProps) {
           previewTimerRef.current = null;
         }
       };
-      audio.play();
+      audio.play().catch((err) => {
+        console.error("Preview playback failed:", err);
+        setIsPreviewing(false);
+      });
       previewAudioRef.current = audio;
       setIsPreviewing(true);
-      
+
       // Start preview timer
       previewTimerRef.current = setInterval(() => {
         if (previewAudioRef.current) {
@@ -177,7 +185,7 @@ export default function AudioRecorder({ onSend, onClose }: AudioRecorderProps) {
     if (previewAudioRef.current) {
       previewAudioRef.current.pause();
       setIsPreviewing(false);
-      
+
       if (previewTimerRef.current) {
         clearInterval(previewTimerRef.current);
         previewTimerRef.current = null;
@@ -205,28 +213,35 @@ export default function AudioRecorder({ onSend, onClose }: AudioRecorderProps) {
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
     const secs = seconds % 60;
-    return `${mins}:${secs.toString().padStart(2, '0')}`;
+    return `${mins}:${secs.toString().padStart(2, "0")}`;
   };
 
   return (
     <Card className="w-80 shadow-lg">
       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3">
         <CardTitle className="text-sm font-medium flex items-center gap-2">
-          <img 
-            src="/assets/generated/microphone-icon-transparent.dim_24x24.png" 
-            alt="Microphone" 
+          <img
+            src="/assets/generated/microphone-icon-transparent.dim_24x24.png"
+            alt="Microphone"
             className="h-5 w-5"
           />
           Audio Recording
         </CardTitle>
-        <Button variant="ghost" size="icon" className="h-6 w-6" onClick={onClose}>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-6 w-6"
+          onClick={onClose}
+        >
           <X className="h-4 w-4" />
         </Button>
       </CardHeader>
       <CardContent className="space-y-4">
         {permissionDenied ? (
           <div className="text-center space-y-3 py-4">
-            <p className="text-sm text-destructive">Microphone permission denied</p>
+            <p className="text-sm text-destructive">
+              Microphone permission denied
+            </p>
             <p className="text-xs text-muted-foreground">
               Please allow microphone access in your browser settings
             </p>
@@ -243,15 +258,19 @@ export default function AudioRecorder({ onSend, onClose }: AudioRecorderProps) {
                     </div>
                     <div className="absolute -top-1 -right-1 h-4 w-4 rounded-full bg-destructive animate-pulse" />
                   </div>
-                  <p className="text-2xl font-mono font-bold">{formatTime(recordingTime)}</p>
-                  <p className="text-xs text-muted-foreground">Recording... (Max: {formatTime(MAX_DURATION)})</p>
+                  <p className="text-2xl font-mono font-bold">
+                    {formatTime(recordingTime)}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    Recording... (Max: {formatTime(MAX_DURATION)})
+                  </p>
                 </>
               ) : recordedBlob ? (
                 <>
                   <div className="h-20 w-20 rounded-full bg-primary/20 flex items-center justify-center">
-                    <img 
-                      src="/assets/generated/audio-waveform-icon-transparent.dim_32x32.png" 
-                      alt="Audio" 
+                    <img
+                      src="/assets/generated/audio-waveform-icon-transparent.dim_32x32.png"
+                      alt="Audio"
                       className="h-12 w-12"
                     />
                   </div>
@@ -259,7 +278,7 @@ export default function AudioRecorder({ onSend, onClose }: AudioRecorderProps) {
                     {formatTime(isPreviewing ? previewTime : duration)}
                   </p>
                   <p className="text-xs text-muted-foreground">
-                    {isPreviewing ? 'Playing...' : 'Ready to send'}
+                    {isPreviewing ? "Playing..." : "Ready to send"}
                   </p>
                 </>
               ) : (
@@ -267,7 +286,9 @@ export default function AudioRecorder({ onSend, onClose }: AudioRecorderProps) {
                   <div className="h-20 w-20 rounded-full bg-muted flex items-center justify-center">
                     <Mic className="h-10 w-10 text-muted-foreground" />
                   </div>
-                  <p className="text-sm text-muted-foreground">Click record to start</p>
+                  <p className="text-sm text-muted-foreground">
+                    Click record to start
+                  </p>
                 </>
               )}
             </div>
@@ -307,11 +328,7 @@ export default function AudioRecorder({ onSend, onClose }: AudioRecorderProps) {
                 </>
               ) : (
                 <>
-                  <Button
-                    onClick={handleCancel}
-                    variant="outline"
-                    size="icon"
-                  >
+                  <Button onClick={handleCancel} variant="outline" size="icon">
                     <X className="h-4 w-4" />
                   </Button>
                   <Button
@@ -325,10 +342,7 @@ export default function AudioRecorder({ onSend, onClose }: AudioRecorderProps) {
                       <Play className="h-4 w-4" />
                     )}
                   </Button>
-                  <Button
-                    onClick={handleSend}
-                    className="gap-2"
-                  >
+                  <Button onClick={handleSend} className="gap-2">
                     <Send className="h-4 w-4" />
                     Send
                   </Button>

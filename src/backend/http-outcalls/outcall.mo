@@ -28,7 +28,10 @@ module {
   let httpRequestCycles = 231_000_000_000;
 
   public func httpGetRequest(url : Text, extraHeaders : [Header], transform : Transform) : async Text {
-    let headers = extraHeaders.concat([{ name = "User-Agent"; value = "caffeine.ai" }]);
+    let headers = extraHeaders.concat([{
+      name = "User-Agent";
+      value = "caffeine.ai";
+    }]);
     let http_request : IC.http_request_args = {
       url;
       max_response_bytes = null;
@@ -51,7 +54,7 @@ module {
   public func httpPostRequest(url : Text, extraHeaders : [Header], body : Text, transform : Transform) : async Text {
     let headers = extraHeaders.concat([
       { name = "User-Agent"; value = "caffeine.ai" },
-      { name = "Idempotency-Key"; value = "Time-" # Time.now().toText() }
+      { name = "Idempotency-Key"; value = "Time-" # Time.now().toText() },
     ]);
     let requestBody = body.encodeUtf8();
     let httpRequest : IC.http_request_args = {

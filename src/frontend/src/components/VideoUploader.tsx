@@ -1,8 +1,8 @@
-import { useState, useRef } from 'react';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Video, X, Send, Upload, Play, Pause, Loader2 } from 'lucide-react';
-import { toast } from 'sonner';
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Loader2, Pause, Play, Send, Upload, Video, X } from "lucide-react";
+import { useRef, useState } from "react";
+import { toast } from "sonner";
 
 interface VideoUploaderProps {
   onSend: (videoBlob: Blob) => void;
@@ -16,7 +16,7 @@ export default function VideoUploader({ onSend, onClose }: VideoUploaderProps) {
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [videoError, setVideoError] = useState<string | null>(null);
-  
+
   const fileInputRef = useRef<HTMLInputElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
 
@@ -30,37 +30,44 @@ export default function VideoUploader({ onSend, onClose }: VideoUploaderProps) {
     setVideoError(null);
 
     // Validate file type
-    const validTypes = ['video/mp4', 'video/webm', 'video/quicktime', 'video/x-msvideo'];
+    const validTypes = [
+      "video/mp4",
+      "video/webm",
+      "video/quicktime",
+      "video/x-msvideo",
+    ];
     if (!validTypes.includes(file.type)) {
-      setVideoError('Please select a valid video file (MP4, WebM, MOV, or AVI)');
-      toast.error('Invalid video format');
+      setVideoError(
+        "Please select a valid video file (MP4, WebM, MOV, or AVI)",
+      );
+      toast.error("Invalid video format");
       return;
     }
 
     // Validate file size
     if (file.size > MAX_SIZE) {
-      setVideoError('Video size must be less than 50MB');
-      toast.error('Video file too large');
+      setVideoError("Video size must be less than 50MB");
+      toast.error("Video file too large");
       return;
     }
 
     try {
       setSelectedVideo(file);
-      
+
       // Create preview URL using URL.createObjectURL for proper Blob handling
       const previewUrl = URL.createObjectURL(file);
       setVideoPreviewUrl(previewUrl);
-      
-      toast.success('Video selected! Preview and send when ready.');
+
+      toast.success("Video selected! Preview and send when ready.");
     } catch (error) {
-      console.error('Error processing video:', error);
-      setVideoError('Failed to process video file');
-      toast.error('Failed to process video');
+      console.error("Error processing video:", error);
+      setVideoError("Failed to process video file");
+      toast.error("Failed to process video");
     }
 
     // Reset file input
     if (fileInputRef.current) {
-      fileInputRef.current.value = '';
+      fileInputRef.current.value = "";
     }
   };
 
@@ -94,21 +101,21 @@ export default function VideoUploader({ onSend, onClose }: VideoUploaderProps) {
       }, 100);
 
       await onSend(selectedVideo);
-      
+
       clearInterval(progressInterval);
       setUploadProgress(100);
-      
+
       // Clean up preview URL
       if (videoPreviewUrl) {
         URL.revokeObjectURL(videoPreviewUrl);
       }
-      
-      toast.success('Video sent!');
+
+      toast.success("Video sent!");
       onClose();
     } catch (error) {
-      console.error('Error sending video:', error);
-      setVideoError('Failed to send video');
-      toast.error('Failed to send video');
+      console.error("Error sending video:", error);
+      setVideoError("Failed to send video");
+      toast.error("Failed to send video");
     } finally {
       setIsUploading(false);
       setUploadProgress(0);
@@ -128,8 +135,8 @@ export default function VideoUploader({ onSend, onClose }: VideoUploaderProps) {
         setIsPlaying(true);
       }
     } catch (error) {
-      console.error('Error toggling video playback:', error);
-      setVideoError('Failed to play video preview');
+      console.error("Error toggling video playback:", error);
+      setVideoError("Failed to play video preview");
     }
   };
 
@@ -137,30 +144,37 @@ export default function VideoUploader({ onSend, onClose }: VideoUploaderProps) {
     setIsPlaying(false);
   };
 
-  const handleVideoError = (e: React.SyntheticEvent<HTMLVideoElement, Event>) => {
-    console.error('Video preview error:', e);
-    setVideoError('Failed to load video preview');
-    toast.error('Video preview failed to load');
+  const handleVideoError = (
+    e: React.SyntheticEvent<HTMLVideoElement, Event>,
+  ) => {
+    console.error("Video preview error:", e);
+    setVideoError("Failed to load video preview");
+    toast.error("Video preview failed to load");
   };
 
   const formatFileSize = (bytes: number) => {
-    if (bytes < 1024) return bytes + ' B';
-    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
-    return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   };
 
   return (
     <Card className="w-96 shadow-lg">
       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3">
         <CardTitle className="text-sm font-medium flex items-center gap-2">
-          <img 
-            src="/assets/generated/video-camera-icon-transparent.dim_24x24.png" 
-            alt="Video" 
+          <img
+            src="/assets/generated/video-camera-icon-transparent.dim_24x24.png"
+            alt="Video"
             className="h-5 w-5"
           />
           Video Upload
         </CardTitle>
-        <Button variant="ghost" size="icon" className="h-6 w-6" onClick={onClose}>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-6 w-6"
+          onClick={onClose}
+        >
           <X className="h-4 w-4" />
         </Button>
       </CardHeader>
@@ -183,7 +197,9 @@ export default function VideoUploader({ onSend, onClose }: VideoUploaderProps) {
                 onError={handleVideoError}
                 controls={false}
                 playsInline
-              />
+              >
+                <track kind="captions" />
+              </video>
               {!isPlaying && (
                 <div className="absolute inset-0 flex items-center justify-center bg-black/30">
                   <Button
@@ -237,12 +253,13 @@ export default function VideoUploader({ onSend, onClose }: VideoUploaderProps) {
           {selectedVideo && (
             <div className="w-full text-center space-y-1">
               <p className="text-xs text-muted-foreground">
-                Size: {formatFileSize(selectedVideo.size)} / {formatFileSize(MAX_SIZE)}
+                Size: {formatFileSize(selectedVideo.size)} /{" "}
+                {formatFileSize(MAX_SIZE)}
               </p>
               {isUploading && uploadProgress > 0 && (
                 <div className="space-y-1">
                   <div className="h-2 w-full bg-muted rounded-full overflow-hidden">
-                    <div 
+                    <div
                       className="h-full bg-primary transition-all duration-300"
                       style={{ width: `${uploadProgress}%` }}
                     />

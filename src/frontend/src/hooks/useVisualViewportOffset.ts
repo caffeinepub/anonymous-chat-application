@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState } from "react";
 
 interface VisualViewportState {
   keyboardOffset: number;
@@ -15,17 +15,17 @@ export function useVisualViewportOffset(): VisualViewportState {
   const [state, setState] = useState<VisualViewportState>({
     keyboardOffset: 0,
     isKeyboardOpen: false,
-    isSupported: typeof window !== 'undefined' && !!window.visualViewport,
+    isSupported: typeof window !== "undefined" && !!window.visualViewport,
   });
 
   useEffect(() => {
-    if (typeof window === 'undefined' || !window.visualViewport) {
+    if (typeof window === "undefined" || !window.visualViewport) {
       return;
     }
 
     // Check if device has a coarse pointer (mobile/touch device)
-    const isMobileDevice = window.matchMedia('(pointer: coarse)').matches;
-    
+    const isMobileDevice = window.matchMedia("(pointer: coarse)").matches;
+
     // If desktop (fine pointer), don't apply keyboard offset
     if (!isMobileDevice) {
       setState({
@@ -66,15 +66,15 @@ export function useVisualViewportOffset(): VisualViewportState {
     updateOffset();
 
     // Listen to viewport changes
-    viewport.addEventListener('resize', handleViewportChange);
-    viewport.addEventListener('scroll', handleViewportChange);
+    viewport.addEventListener("resize", handleViewportChange);
+    viewport.addEventListener("scroll", handleViewportChange);
 
     return () => {
       if (rafId !== null) {
         cancelAnimationFrame(rafId);
       }
-      viewport.removeEventListener('resize', handleViewportChange);
-      viewport.removeEventListener('scroll', handleViewportChange);
+      viewport.removeEventListener("resize", handleViewportChange);
+      viewport.removeEventListener("scroll", handleViewportChange);
     };
   }, []);
 

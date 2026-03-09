@@ -1,64 +1,34 @@
-import { extractICRejectDetails } from './icRejectDetails';
+import { extractICRejectDetails } from "./icRejectDetails";
 
 export interface ChatOperationError {
   operation: string;
-  context: Record<string, any>;
-  sanitizedMessage: string;
-  rawError: unknown;
-  icRejectDetails?: {
-    code?: string;
-    message?: string;
-  };
+  timestamp: number;
+  rejectCode?: string;
+  rejectMessage?: string;
+  errorType?: string;
+  errorMessage?: string;
 }
 
-export function createChatOperationError(
+export function logOperationError(
   operation: string,
-  context: Record<string, any>,
-  sanitizedMessage: string,
-  rawError: unknown
+  error: unknown,
 ): ChatOperationError {
-  const icRejectDetails = extractICRejectDetails(rawError);
-  
-  return {
+  const { code: rejectCode, message: rejectMessage } =
+    extractICRejectDetails(error);
+
+  const errorLog: ChatOperationError = {
     operation,
-    context,
-    sanitizedMessage,
-    rawError,
-    icRejectDetails,
+    timestamp: Date.now(),
+    rejectCode,
+    rejectMessage,
+    errorType: error instanceof Error ? error.constructor.name : typeof error,
+    errorMessage: error instanceof Error ? error.message : String(error),
   };
-}
 
-export function logChatOperationError(error: ChatOperationError): void {
-  console.group(`❌ Chat Operation Failed: ${error.operation}`);
-  console.log('Context:', error.context);
-  console.log('User Message:', error.sanitizedMessage);
-  
-  if (error.icRejectDetails) {
-    console.log('IC Reject Details:', error.icRejectDetails);
-  }
-  
-  console.log('Raw Error:', error.rawError);
-  console.groupEnd();
-}
+  console.error(`[ChatOperation:${operation}]`, {
+    ...errorLog,
+    fullError: error,
+  });
 
-/**
- * Log safe operation failure without sensitive user content
- * Used for diagnostics that should not include nicknames, message content, etc.
- */
-export function logSafeOperationFailure(
-  operation: string,
-  safeContext: Record<string, any>,
-  error: unknown
-): void {
-  const icRejectDetails = extractICRejectDetails(error);
-  
-  console.group(`⚠️ Operation Failed: ${operation}`);
-  console.log('Safe Context:', safeContext);
-  
-  if (icRejectDetails) {
-    console.log('IC Reject Details:', icRejectDetails);
-  }
-  
-  console.log('Error:', error);
-  console.groupEnd();
+  return errorLog;
 }

@@ -25,20 +25,24 @@ export const UserRole = IDL.Variant({
   'guest' : IDL.Null,
 });
 export const ExternalBlob = IDL.Vec(IDL.Nat8);
+export const MediaFile = IDL.Record({
+  'originalName' : IDL.Text,
+  'contentType' : IDL.Text,
+  'file' : ExternalBlob,
+});
 export const Time = IDL.Int;
 export const Reaction = IDL.Record({ 'userId' : IDL.Text, 'emoji' : IDL.Text });
 export const MessageView = IDL.Record({
   'id' : IDL.Nat,
   'content' : IDL.Text,
   'nickname' : IDL.Text,
-  'owner' : IDL.Text,
-  'audioUrl' : IDL.Opt(ExternalBlob),
-  'imageUrl' : IDL.Opt(ExternalBlob),
+  'audio' : IDL.Opt(MediaFile),
+  'video' : IDL.Opt(MediaFile),
   'isEdited' : IDL.Bool,
   'nonce' : IDL.Opt(IDL.Text),
   'timestamp' : Time,
+  'image' : IDL.Opt(MediaFile),
   'replyToId' : IDL.Opt(IDL.Nat),
-  'videoUrl' : IDL.Opt(ExternalBlob),
   'reactions' : IDL.Vec(Reaction),
 });
 export const UserProfile = IDL.Record({ 'nickname' : IDL.Text });
@@ -77,17 +81,21 @@ export const idlService = IDL.Service({
       [],
     ),
   'assignCallerUserRole' : IDL.Func([IDL.Principal, UserRole], [], []),
-  'createRoom' : IDL.Func([IDL.Text], [IDL.Text], []),
-  'deleteMessage' : IDL.Func([IDL.Text, IDL.Nat, IDL.Text], [IDL.Bool], []),
+  'createRoom' : IDL.Func(
+      [IDL.Text, IDL.Text],
+      [IDL.Record({ 'joinCode' : IDL.Text })],
+      [],
+    ),
+  'deleteMessage' : IDL.Func([IDL.Text, IDL.Nat], [IDL.Bool], []),
   'editMessage' : IDL.Func(
       [
         IDL.Text,
         IDL.Nat,
         IDL.Text,
         IDL.Text,
-        IDL.Opt(ExternalBlob),
-        IDL.Opt(ExternalBlob),
-        IDL.Opt(ExternalBlob),
+        IDL.Opt(MediaFile),
+        IDL.Opt(MediaFile),
+        IDL.Opt(MediaFile),
       ],
       [IDL.Bool],
       [],
@@ -107,6 +115,11 @@ export const idlService = IDL.Service({
       ['query'],
     ),
   'isCallerAdmin' : IDL.Func([], [IDL.Bool], ['query']),
+  'joinRoom' : IDL.Func(
+      [IDL.Text, IDL.Text],
+      [IDL.Record({ 'nickname' : IDL.Text })],
+      [],
+    ),
   'pruneExpiredMessages' : IDL.Func([], [], []),
   'removeReaction' : IDL.Func(
       [IDL.Text, IDL.Nat, IDL.Text, IDL.Text],
@@ -120,11 +133,10 @@ export const idlService = IDL.Service({
         IDL.Text,
         IDL.Text,
         IDL.Text,
-        IDL.Text,
         IDL.Opt(IDL.Nat),
-        IDL.Opt(ExternalBlob),
-        IDL.Opt(ExternalBlob),
-        IDL.Opt(ExternalBlob),
+        IDL.Opt(MediaFile),
+        IDL.Opt(MediaFile),
+        IDL.Opt(MediaFile),
         IDL.Text,
       ],
       [IDL.Nat],
@@ -152,20 +164,24 @@ export const idlFactory = ({ IDL }) => {
     'guest' : IDL.Null,
   });
   const ExternalBlob = IDL.Vec(IDL.Nat8);
+  const MediaFile = IDL.Record({
+    'originalName' : IDL.Text,
+    'contentType' : IDL.Text,
+    'file' : ExternalBlob,
+  });
   const Time = IDL.Int;
   const Reaction = IDL.Record({ 'userId' : IDL.Text, 'emoji' : IDL.Text });
   const MessageView = IDL.Record({
     'id' : IDL.Nat,
     'content' : IDL.Text,
     'nickname' : IDL.Text,
-    'owner' : IDL.Text,
-    'audioUrl' : IDL.Opt(ExternalBlob),
-    'imageUrl' : IDL.Opt(ExternalBlob),
+    'audio' : IDL.Opt(MediaFile),
+    'video' : IDL.Opt(MediaFile),
     'isEdited' : IDL.Bool,
     'nonce' : IDL.Opt(IDL.Text),
     'timestamp' : Time,
+    'image' : IDL.Opt(MediaFile),
     'replyToId' : IDL.Opt(IDL.Nat),
-    'videoUrl' : IDL.Opt(ExternalBlob),
     'reactions' : IDL.Vec(Reaction),
   });
   const UserProfile = IDL.Record({ 'nickname' : IDL.Text });
@@ -204,17 +220,21 @@ export const idlFactory = ({ IDL }) => {
         [],
       ),
     'assignCallerUserRole' : IDL.Func([IDL.Principal, UserRole], [], []),
-    'createRoom' : IDL.Func([IDL.Text], [IDL.Text], []),
-    'deleteMessage' : IDL.Func([IDL.Text, IDL.Nat, IDL.Text], [IDL.Bool], []),
+    'createRoom' : IDL.Func(
+        [IDL.Text, IDL.Text],
+        [IDL.Record({ 'joinCode' : IDL.Text })],
+        [],
+      ),
+    'deleteMessage' : IDL.Func([IDL.Text, IDL.Nat], [IDL.Bool], []),
     'editMessage' : IDL.Func(
         [
           IDL.Text,
           IDL.Nat,
           IDL.Text,
           IDL.Text,
-          IDL.Opt(ExternalBlob),
-          IDL.Opt(ExternalBlob),
-          IDL.Opt(ExternalBlob),
+          IDL.Opt(MediaFile),
+          IDL.Opt(MediaFile),
+          IDL.Opt(MediaFile),
         ],
         [IDL.Bool],
         [],
@@ -234,6 +254,11 @@ export const idlFactory = ({ IDL }) => {
         ['query'],
       ),
     'isCallerAdmin' : IDL.Func([], [IDL.Bool], ['query']),
+    'joinRoom' : IDL.Func(
+        [IDL.Text, IDL.Text],
+        [IDL.Record({ 'nickname' : IDL.Text })],
+        [],
+      ),
     'pruneExpiredMessages' : IDL.Func([], [], []),
     'removeReaction' : IDL.Func(
         [IDL.Text, IDL.Nat, IDL.Text, IDL.Text],
@@ -247,11 +272,10 @@ export const idlFactory = ({ IDL }) => {
           IDL.Text,
           IDL.Text,
           IDL.Text,
-          IDL.Text,
           IDL.Opt(IDL.Nat),
-          IDL.Opt(ExternalBlob),
-          IDL.Opt(ExternalBlob),
-          IDL.Opt(ExternalBlob),
+          IDL.Opt(MediaFile),
+          IDL.Opt(MediaFile),
+          IDL.Opt(MediaFile),
           IDL.Text,
         ],
         [IDL.Nat],

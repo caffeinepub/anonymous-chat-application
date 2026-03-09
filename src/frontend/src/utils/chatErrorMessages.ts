@@ -1,146 +1,65 @@
-import { extractICRejectDetails, getCandidateMessages } from './icRejectDetails';
+import { extractICRejectDetails } from "./icRejectDetails";
 
-/**
- * Sanitizes backend and network errors into anonymous, nickname-based, user-friendly messages.
- * Removes any references to "users", "login", "authentication", or "Internet Identity".
- * Prioritizes IC reject_message over generic error stringification.
- */
-export function sanitizeChatError(error: unknown): string {
-  if (!error) {
-    return 'An unexpected error occurred';
+const KNOWN_BACKEND_TRAPS: Record<string, string> = {
+  "Unauthorized: Only users can create rooms": "Please login to create a room",
+  "Unauthorized: Only users can view messages": "Please login to view messages",
+  "Unauthorized: Only users can send messages": "Please login to send messages",
+  "Unauthorized: Only users can edit messages": "Please login to edit messages",
+  "Unauthorized: Only users can delete messages":
+    "Please login to delete messages",
+  "Unauthorized: Only users can add reactions": "Please login to add reactions",
+  "Unauthorized: Only users can remove reactions":
+    "Please login to remove reactions",
+  "Unauthorized: Only users can access profiles":
+    "Please login to access profiles",
+  "Unauthorized: Only users can save profiles":
+    "Please login to save your profile",
+  "Nickname cannot be empty": "Please enter a nickname",
+  "Nickname cannot exceed 20 characters":
+    "Nickname is too long (max 20 characters)",
+  "Room join code cannot be empty": "Please enter a room code",
+  "Room join code cannot exceed 30 characters":
+    "Room code is too long (max 30 characters)",
+  "Room already exists":
+    "This room code is already taken. Please choose another one.",
+  "Actor not initialized":
+    "Connection not ready. Please wait a moment and try again.",
+  "Actor not available":
+    "Connection not ready. Please wait a moment and try again.",
+};
+
+export function getChatErrorMessage(error: unknown): string {
+  const { message: rejectMessage } = extractICRejectDetails(error);
+
+  if (rejectMessage) {
+    for (const [trapString, userMessage] of Object.entries(
+      KNOWN_BACKEND_TRAPS,
+    )) {
+      if (rejectMessage.includes(trapString)) {
+        return userMessage;
+      }
+    }
+
+    if (rejectMessage.includes("Unauthorized")) {
+      return "You need to login to perform this action";
+    }
+
+    if (rejectMessage.includes("Room")) {
+      return "Room operation failed. Please check the room code and try again.";
+    }
+
+    if (rejectMessage.includes("Nickname")) {
+      return "Invalid nickname. Please check and try again.";
+    }
+
+    return "Operation failed. Please try again.";
   }
 
-  // Get all candidate error messages (Error.message, reject_message, etc.)
-  const candidateMessages = getCandidateMessages(error);
-  
-  // Try to find a specific actionable message from candidates
-  for (const errorMessage of candidateMessages) {
-    const lowerMessage = errorMessage.toLowerCase();
-
-    // Nickname validation errors
-    if (lowerMessage.includes('nickname cannot be empty')) {
-      return 'Nickname cannot be empty';
-    }
-
-    if (lowerMessage.includes('nickname cannot exceed 20 characters')) {
-      return 'Nickname cannot exceed 20 characters';
-    }
-
-    // Room code validation errors
-    if (lowerMessage.includes('room join code cannot be empty') || 
-        lowerMessage.includes('room code cannot be empty')) {
-      return 'Room code cannot be empty';
-    }
-
-    if (lowerMessage.includes('room join code cannot exceed 30 characters') ||
-        lowerMessage.includes('room code cannot exceed 30 characters')) {
-      return 'Room code cannot exceed 30 characters';
-    }
-
-    // Room existence errors (specific backend traps)
-    if (lowerMessage.includes('cannot send message: room does not exist') || 
-        lowerMessage.includes('room does not exist')) {
-      return 'Room does not exist. Please check the room code.';
-    }
-
-    if (lowerMessage.includes('room already exists')) {
-      return 'Room already exists. Please use Join Room.';
-    }
-
-    // Authorization errors - map to specific anonymized messages
-    if (lowerMessage.includes('unauthorized: only users can send messages')) {
-      return 'Unable to send message. Please try again.';
-    }
-
-    if (lowerMessage.includes('unauthorized: only users can create rooms')) {
-      return 'Unable to create room. Please try again or join an existing room.';
-    }
-
-    if (lowerMessage.includes('unauthorized: only users can view messages') ||
-        lowerMessage.includes('unauthorized: only users can access')) {
-      return 'Unable to access room. Please check the room code.';
-    }
-
-    if (lowerMessage.includes('unauthorized: only users can edit messages') ||
-        lowerMessage.includes('unauthorized: only users can delete messages')) {
-      return 'You can only modify your own messages';
-    }
-
-    if (lowerMessage.includes('unauthorized: only users can add reactions') ||
-        lowerMessage.includes('unauthorized: only users can remove reactions')) {
-      return 'Unable to update reaction. Please try again.';
-    }
-
-    // Generic authorization/authentication errors (fallback)
-    if (
-      lowerMessage.includes('unauthorized') ||
-      lowerMessage.includes('authentication') ||
-      lowerMessage.includes('login') ||
-      lowerMessage.includes('identity')
-    ) {
-      return 'Permission denied. Please try again.';
-    }
-
-    // Connection/network errors
-    if (
-      lowerMessage.includes('connection not ready') ||
-      lowerMessage.includes('actor not') ||
-      lowerMessage.includes('not initialized')
-    ) {
-      return 'Connection not ready. Please wait and try again.';
-    }
-
-    if (
-      lowerMessage.includes('network') ||
-      lowerMessage.includes('fetch') ||
-      lowerMessage.includes('timeout')
-    ) {
-      return 'Network error. Please check your connection and try again.';
-    }
-
-    if (lowerMessage.includes('whitespace only')) {
-      return 'Input cannot be empty or whitespace only.';
-    }
-
-    // Upload errors
-    if (
-      lowerMessage.includes('upload') ||
-      lowerMessage.includes('uploading')
-    ) {
-      return 'Please wait for upload to complete';
-    }
-
-    // Message operation errors
-    if (lowerMessage.includes('failed to send')) {
-      return 'Failed to send message. Please try again.';
-    }
-
-    if (lowerMessage.includes('failed to edit')) {
-      return 'Failed to edit message. Please try again.';
-    }
-
-    if (lowerMessage.includes('failed to delete')) {
-      return 'Failed to delete message. Please try again.';
-    }
-
-    if (lowerMessage.includes('failed to add reaction') || lowerMessage.includes('failed to remove reaction')) {
-      return 'Failed to update reaction. Please try again.';
-    }
-
-    if (lowerMessage.includes('failed to verify')) {
-      return 'Room creation verification failed. Please try joining the room instead.';
-    }
-
-    // Validation errors - pass through as-is if they're user-friendly
-    if (
-      lowerMessage.includes('required') ||
-      lowerMessage.includes('invalid') ||
-      lowerMessage.includes('must be')
-    ) {
-      return errorMessage;
+  if (error instanceof Error) {
+    if (error.message.includes("network") || error.message.includes("fetch")) {
+      return "Network error. Please check your connection and try again.";
     }
   }
 
-  // Default fallback for unknown errors (only when no actionable message found)
-  return 'An error occurred. Please try again.';
+  return "An unexpected error occurred. Please try again.";
 }

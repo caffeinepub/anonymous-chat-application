@@ -1,37 +1,41 @@
-import { useState, useEffect, useRef } from 'react';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { ScrollArea } from '@/components/ui/scroll-area';
-import { 
-  Send, 
-  Image as ImageIcon, 
-  Smile, 
-  Loader2, 
-  Mic, 
+import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  AlertCircle,
+  Image as ImageIcon,
+  Loader2,
+  Mic,
+  Send,
+  Smile,
+  Upload,
   Video,
   X,
-  AlertCircle
-} from 'lucide-react';
-import { 
-  useMessages, 
-  useSendMessage, 
-  useEditMessage, 
-  useDeleteMessage,
+} from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { toast } from "sonner";
+import type { MediaFile, MessageView } from "../backend";
+import { ExternalBlob } from "../backend";
+import {
   useAddReaction,
-  useRemoveReaction
-} from '../hooks/useQueries';
-import MessageBubble from './MessageBubble';
-import EmojiPicker from './EmojiPicker';
-import MediaPicker from './MediaPicker';
-import AudioRecorder from './AudioRecorder';
-import VideoRecorder from './VideoRecorder';
-import VideoUploader from './VideoUploader';
-import type { MessageView } from '../backend';
-import { ExternalBlob } from '../backend';
-import { toast } from 'sonner';
-import { useVisualViewportOffset } from '../hooks/useVisualViewportOffset';
-import { normalizeRoomId } from '../utils/roomId';
-import { generateMessageNonce } from '../utils/messageNonce';
+  useDeleteMessage,
+  useEditMessage,
+  useGetMessages,
+  useRemoveReaction,
+  useSendMessage,
+} from "../hooks/useQueries";
+import { useVisualViewportOffset } from "../hooks/useVisualViewportOffset";
+import { generateMessageNonce } from "../utils/messageNonce";
+import {
+  generateFallbackFilename,
+  getExtensionFromMimeType,
+  isImageMimeType,
+} from "../utils/mime";
+import { normalizeRoomId } from "../utils/roomId";
+import AudioRecorder from "./AudioRecorder";
+import EmojiPicker from "./EmojiPicker";
+import MessageBubble from "./MessageBubble";
+import VideoRecorder from "./VideoRecorder";
+import VideoUploader from "./VideoUploader";
 
 interface ChatRoomProps {
   roomId: string;
@@ -40,64 +44,103 @@ interface ChatRoomProps {
 
 // Generate a unique user ID for the session (stored in localStorage)
 function getUserId(): string {
-  const stored = localStorage.getItem('chatUserId');
+  const stored = localStorage.getItem("chatUserId");
   if (stored) return stored;
   const newId = `user_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-  localStorage.setItem('chatUserId', newId);
+  localStorage.setItem("chatUserId", newId);
   return newId;
 }
 
 export default function ChatRoom({ roomId, nickname }: ChatRoomProps) {
   // Normalize roomId for all operations
   const normalizedRoomId = normalizeRoomId(roomId);
-  
-  const [messageInput, setMessageInput] = useState('');
+
+  const [messageInput, setMessageInput] = useState("");
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
-  const [showMediaPicker, setShowMediaPicker] = useState(false);
   const [showAudioRecorder, setShowAudioRecorder] = useState(false);
   const [showVideoRecorder, setShowVideoRecorder] = useState(false);
   const [showVideoUploader, setShowVideoUploader] = useState(false);
   const [replyingTo, setReplyingTo] = useState<MessageView | null>(null);
-  const [editingMessage, setEditingMessage] = useState<MessageView | null>(null);
-  const [selectedImage, setSelectedImage] = useState<ExternalBlob | null>(null);
+  const [editingMessage, setEditingMessage] = useState<MessageView | null>(
+    null,
+  );
+  const [selectedImage, setSelectedImage] = useState<MediaFile | null>(null);
   const [isSending, setIsSending] = useState(false);
   const [currentNonce, setCurrentNonce] = useState<string | null>(null);
-  
-  const scrollAreaRef = useRef<HTMLDivElement>(null);
+
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const viewportState = useVisualViewportOffset();
   const keyboardOffset = viewportState.keyboardOffset;
-  
-  const currentUserId = getUserId();
-  
-  const { data: messages = [], isLoading, error: messagesError } = useMessages(normalizedRoomId);
-  const sendMessageMutation = useSendMessage();
-  const editMessageMutation = useEditMessage();
-  const deleteMessageMutation = useDeleteMessage();
-  const addReactionMutation = useAddReaction();
-  const removeReactionMutation = useRemoveReaction();
 
-  // Auto-scroll to bottom when new messages arrive
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages.length]);
+  const currentUserId = getUserId();
+
+  const {
+    data: messages = [],
+    isLoading,
+    error: messagesError,
+  } = useGetMessages(normalizedRoomId);
+  const sendMessageMutation = useSendMessage(normalizedRoomId);
+  const editMessageMutation = useEditMessage(normalizedRoomId);
+  const deleteMessageMutation = useDeleteMessage(normalizedRoomId);
+  const addReactionMutation = useAddReaction(normalizedRoomId);
+  const removeReactionMutation = useRemoveReaction(normalizedRoomId);
 
   // Focus input on mount
   useEffect(() => {
     inputRef.current?.focus();
   }, []);
 
+  const handleImageFileSelect = async (
+    e: React.ChangeEvent<HTMLInputElement>,
+  ) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Validate that it's an image
+    if (!isImageMimeType(file.type)) {
+      toast.error(
+        "Please select a valid image file (JPEG, PNG, GIF, WebP, etc.)",
+      );
+      e.target.value = ""; // Reset input
+      return;
+    }
+
+    try {
+      // Convert File to ExternalBlob
+      const arrayBuffer = await file.arrayBuffer();
+      const uint8Array = new Uint8Array(arrayBuffer);
+      const externalBlob = ExternalBlob.fromBytes(uint8Array);
+
+      // Create MediaFile with metadata
+      const mediaFile: MediaFile = {
+        file: externalBlob,
+        originalName: file.name,
+        contentType: file.type,
+      };
+
+      setSelectedImage(mediaFile);
+      e.target.value = ""; // Reset input for next selection
+      inputRef.current?.focus();
+    } catch (error) {
+      console.error("Error loading image:", error);
+      toast.error("Failed to load image. Please try again.");
+      e.target.value = "";
+    }
+  };
+
   const handleSendMessage = async (e?: React.FormEvent) => {
     e?.preventDefault();
-    
+
     // Prevent double submission
     if (isSending) {
       return;
     }
-    
+
     const trimmedMessage = messageInput.trim();
-    
+
     if (!trimmedMessage && !selectedImage) {
       return;
     }
@@ -109,25 +152,27 @@ export default function ChatRoom({ roomId, nickname }: ChatRoomProps) {
 
     try {
       await sendMessageMutation.mutateAsync({
-        roomId: normalizedRoomId,
         content: trimmedMessage,
         nickname,
-        replyToId: replyingTo?.id ?? null,
-        image: selectedImage,
-        video: null,
-        audio: null,
+        userId: currentUserId,
+        replyToId: replyingTo?.id,
+        image: selectedImage ?? undefined,
+        video: undefined,
+        audio: undefined,
         nonce,
       });
 
       // Clear input and state only on success
-      setMessageInput('');
+      setMessageInput("");
       setSelectedImage(null);
       setReplyingTo(null);
       setShowEmojiPicker(false);
+      resetTextareaHeight();
       inputRef.current?.focus();
     } catch (error) {
       // Error is already logged and toasted by the mutation
-      const errorMessage = error instanceof Error ? error.message : 'Failed to send message';
+      const errorMessage =
+        error instanceof Error ? error.message : "Failed to send message";
       toast.error(errorMessage);
     } finally {
       setIsSending(false);
@@ -136,52 +181,65 @@ export default function ChatRoom({ roomId, nickname }: ChatRoomProps) {
   };
 
   const handleSendAudio = async (audioBlob: Blob) => {
-    // Convert Blob to ExternalBlob
+    // Convert Blob to ExternalBlob with metadata
     const arrayBuffer = await audioBlob.arrayBuffer();
     const uint8Array = new Uint8Array(arrayBuffer);
     const externalBlob = ExternalBlob.fromBytes(uint8Array);
-    
+
+    const audioFile: MediaFile = {
+      file: externalBlob,
+      originalName: generateFallbackFilename("audio/webm", "audio"),
+      contentType: "audio/webm",
+    };
+
     // Generate nonce for audio message
     const nonce = generateMessageNonce();
-    
+
     try {
       await sendMessageMutation.mutateAsync({
-        roomId: normalizedRoomId,
-        content: '',
+        content: "",
         nickname,
-        replyToId: replyingTo?.id ?? null,
-        image: null,
-        video: null,
-        audio: externalBlob,
+        userId: currentUserId,
+        replyToId: replyingTo?.id,
+        image: undefined,
+        video: undefined,
+        audio: audioFile,
         nonce,
       });
 
       setReplyingTo(null);
       setShowAudioRecorder(false);
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Failed to send audio';
+      const errorMessage =
+        error instanceof Error ? error.message : "Failed to send audio";
       toast.error(errorMessage);
     }
   };
 
   const handleSendVideo = async (videoBlob: Blob) => {
-    // Convert Blob to ExternalBlob
+    // Convert Blob to ExternalBlob with metadata
     const arrayBuffer = await videoBlob.arrayBuffer();
     const uint8Array = new Uint8Array(arrayBuffer);
     const externalBlob = ExternalBlob.fromBytes(uint8Array);
-    
+
+    const videoFile: MediaFile = {
+      file: externalBlob,
+      originalName: generateFallbackFilename("video/webm", "video"),
+      contentType: "video/webm",
+    };
+
     // Generate nonce for video message
     const nonce = generateMessageNonce();
-    
+
     try {
       await sendMessageMutation.mutateAsync({
-        roomId: normalizedRoomId,
-        content: '',
+        content: "",
         nickname,
-        replyToId: replyingTo?.id ?? null,
-        image: null,
-        video: externalBlob,
-        audio: null,
+        userId: currentUserId,
+        replyToId: replyingTo?.id,
+        image: undefined,
+        video: videoFile,
+        audio: undefined,
         nonce,
       });
 
@@ -189,7 +247,8 @@ export default function ChatRoom({ roomId, nickname }: ChatRoomProps) {
       setShowVideoRecorder(false);
       setShowVideoUploader(false);
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Failed to send video';
+      const errorMessage =
+        error instanceof Error ? error.message : "Failed to send video";
       toast.error(errorMessage);
     }
   };
@@ -199,26 +258,29 @@ export default function ChatRoom({ roomId, nickname }: ChatRoomProps) {
 
     const trimmedContent = messageInput.trim();
     if (!trimmedContent && !selectedImage) {
-      toast.error('Message cannot be empty');
+      toast.error("Message cannot be empty");
       return;
     }
 
     try {
       await editMessageMutation.mutateAsync({
-        roomId: normalizedRoomId,
         messageId: editingMessage.id,
+        userId: currentUserId,
+        nickname,
         newContent: trimmedContent,
-        newImage: selectedImage,
-        newVideo: null,
-        newAudio: null,
+        newImage: selectedImage ?? undefined,
+        newVideo: undefined,
+        newAudio: undefined,
       });
 
-      setMessageInput('');
+      setMessageInput("");
       setSelectedImage(null);
       setEditingMessage(null);
+      resetTextareaHeight();
       inputRef.current?.focus();
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Failed to edit message';
+      const errorMessage =
+        error instanceof Error ? error.message : "Failed to edit message";
       toast.error(errorMessage);
     }
   };
@@ -231,39 +293,41 @@ export default function ChatRoom({ roomId, nickname }: ChatRoomProps) {
 
     try {
       await deleteMessageMutation.mutateAsync({
-        roomId: normalizedRoomId,
         messageId: message.id,
+        userId: currentUserId,
       });
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Failed to delete message';
+      const errorMessage =
+        error instanceof Error ? error.message : "Failed to delete message";
       toast.error(errorMessage);
     }
   };
 
   const handleReaction = async (messageId: bigint, emoji: string) => {
-    const message = messages.find(m => m.id === messageId);
+    const message = messages.find((m) => m.id === messageId);
     if (!message) return;
 
     const existingReaction = message.reactions.find(
-      r => r.userId === currentUserId && r.emoji === emoji
+      (r) => r.userId === currentUserId && r.emoji === emoji,
     );
 
     try {
       if (existingReaction) {
         await removeReactionMutation.mutateAsync({
-          roomId: normalizedRoomId,
           messageId,
+          userId: currentUserId,
           emoji,
         });
       } else {
         await addReactionMutation.mutateAsync({
-          roomId: normalizedRoomId,
           messageId,
+          userId: currentUserId,
           emoji,
         });
       }
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Failed to update reaction';
+      const errorMessage =
+        error instanceof Error ? error.message : "Failed to update reaction";
       toast.error(errorMessage);
     }
   };
@@ -276,57 +340,48 @@ export default function ChatRoom({ roomId, nickname }: ChatRoomProps) {
   const handleEdit = (message: MessageView) => {
     setEditingMessage(message);
     setMessageInput(message.content);
-    if (message.imageUrl) {
-      setSelectedImage(message.imageUrl);
+    if (message.image) {
+      setSelectedImage(message.image);
     }
     inputRef.current?.focus();
   };
 
   const handleCancelEdit = () => {
     setEditingMessage(null);
-    setMessageInput('');
+    setMessageInput("");
     setSelectedImage(null);
+    resetTextareaHeight();
     inputRef.current?.focus();
   };
 
   const handleEmojiSelect = (emoji: string) => {
-    setMessageInput(prev => prev + emoji);
+    setMessageInput((prev) => prev + emoji);
     setShowEmojiPicker(false);
     inputRef.current?.focus();
   };
 
-  const handleMediaSelect = async (url: string) => {
-    try {
-      // Convert URL to ExternalBlob
-      const response = await fetch(url);
-      const blob = await response.blob();
-      const arrayBuffer = await blob.arrayBuffer();
-      const uint8Array = new Uint8Array(arrayBuffer);
-      const externalBlob = ExternalBlob.fromBytes(uint8Array);
-      
-      setSelectedImage(externalBlob);
-      setShowMediaPicker(false);
-      inputRef.current?.focus();
-    } catch (error) {
-      console.error('Error loading media:', error);
-      toast.error('Failed to load media');
-    }
-  };
-
   const handleJumpToMessage = (messageId: bigint) => {
     const messageElement = document.getElementById(`message-${messageId}`);
-    if (messageElement) {
-      messageElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      messageElement.classList.add('highlight-message');
+    if (messageElement && scrollContainerRef.current) {
+      const container = scrollContainerRef.current;
+      const messageTop = messageElement.offsetTop;
+      const containerHeight = container.clientHeight;
+      const messageHeight = messageElement.clientHeight;
+
+      // Scroll to center the message
+      container.scrollTop =
+        messageTop - containerHeight / 2 + messageHeight / 2;
+
+      messageElement.classList.add("highlight-message");
       setTimeout(() => {
-        messageElement.classList.remove('highlight-message');
+        messageElement.classList.remove("highlight-message");
       }, 2000);
     }
   };
 
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    // Prevent double submission on Enter
-    if (e.key === 'Enter' && !e.shiftKey) {
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    // Enter alone sends; Shift+Enter inserts a newline
+    if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       if (!isSending) {
         if (editingMessage) {
@@ -337,6 +392,64 @@ export default function ChatRoom({ roomId, nickname }: ChatRoomProps) {
       }
     }
   };
+
+  // Auto-resize the textarea as content grows (up to ~120 px / ~5 lines)
+  const autoResizeTextarea = (el: HTMLTextAreaElement) => {
+    el.style.height = "auto";
+    el.style.height = `${Math.min(el.scrollHeight, 120)}px`;
+  };
+
+  const handleTextareaChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    setMessageInput(e.target.value);
+    autoResizeTextarea(e.target);
+  };
+
+  // Reset textarea height after send / cancel
+  const resetTextareaHeight = () => {
+    if (inputRef.current) {
+      inputRef.current.style.height = "auto";
+    }
+  };
+
+  // Paste handler: intercept clipboard images and convert them to MediaFile
+  const handlePaste = async (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    const items = Array.from(e.clipboardData.items);
+    const imageItem = items.find((item) => item.type.startsWith("image/"));
+
+    if (!imageItem) {
+      // No image in clipboard — let normal text paste proceed
+      return;
+    }
+
+    e.preventDefault();
+
+    const blob = imageItem.getAsFile();
+    if (!blob) return;
+
+    try {
+      const arrayBuffer = await blob.arrayBuffer();
+      const uint8Array = new Uint8Array(arrayBuffer);
+      const externalBlob = ExternalBlob.fromBytes(uint8Array);
+
+      // Derive extension from mime type (e.g. image/png → png)
+      const ext = getExtensionFromMimeType(imageItem.type);
+      const filename = `pasted-image.${ext}`;
+
+      const mediaFile: MediaFile = {
+        file: externalBlob,
+        originalName: filename,
+        contentType: imageItem.type,
+      };
+
+      setSelectedImage(mediaFile);
+    } catch (error) {
+      console.error("Error pasting image from clipboard:", error);
+      toast.error("Failed to paste image. Please try again.");
+    }
+  };
+
+  // Suppress unused variable warning for currentNonce (used for deduplication tracking)
+  void currentNonce;
 
   if (isLoading) {
     return (
@@ -355,65 +468,72 @@ export default function ChatRoom({ roomId, nickname }: ChatRoomProps) {
         <div className="text-center space-y-4 max-w-md">
           <AlertCircle className="h-12 w-12 mx-auto text-destructive" />
           <div>
-            <h3 className="text-lg font-semibold mb-2">Failed to Load Messages</h3>
+            <h3 className="text-lg font-semibold mb-2">
+              Failed to Load Messages
+            </h3>
             <p className="text-sm text-muted-foreground">
-              {messagesError instanceof Error ? messagesError.message : 'An error occurred while loading messages'}
+              {messagesError instanceof Error
+                ? messagesError.message
+                : "An error occurred while loading messages"}
             </p>
           </div>
-          <Button onClick={() => window.location.reload()}>
-            Reload Page
-          </Button>
+          <Button onClick={() => window.location.reload()}>Reload Page</Button>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="flex-1 flex flex-col min-h-0 relative">
-      {/* Messages Area */}
-      <ScrollArea 
-        ref={scrollAreaRef}
-        className="flex-1 px-4 py-4"
+    <div
+      className="flex-1 flex flex-col min-h-0"
+      style={{
+        paddingBottom: keyboardOffset > 0 ? `${keyboardOffset}px` : undefined,
+        transition: "padding-bottom 0.2s ease-out",
+      }}
+    >
+      {/* Messages Area - scrollable container */}
+      <div
+        ref={scrollContainerRef}
+        className="flex-1 overflow-y-auto overflow-x-hidden chat-scroll-container"
       >
-        <div className="max-w-4xl mx-auto space-y-4">
-          {messages.length === 0 ? (
-            <div className="text-center py-12 text-muted-foreground">
-              <p className="text-lg mb-2">No messages yet</p>
-              <p className="text-sm">Be the first to send a message!</p>
-            </div>
-          ) : (
-            messages.map((message) => (
-              <div key={message.id.toString()} id={`message-${message.id}`}>
-                <MessageBubble
-                  message={message}
-                  currentNickname={nickname}
-                  currentUserId={currentUserId}
-                  onReply={handleReply}
-                  onEdit={handleEdit}
-                  onDelete={handleDeleteMessage}
-                  onReaction={handleReaction}
-                  onJumpToMessage={handleJumpToMessage}
-                  allMessages={messages}
-                />
+        <div className="px-4 py-4">
+          <div className="max-w-4xl mx-auto space-y-4">
+            {messages.length === 0 ? (
+              <div className="text-center py-12 text-muted-foreground">
+                <p className="text-lg mb-2">No messages yet</p>
+                <p className="text-sm">Be the first to send a message!</p>
               </div>
-            ))
-          )}
-          <div ref={messagesEndRef} />
+            ) : (
+              messages.map((message) => (
+                <div key={message.id.toString()} id={`message-${message.id}`}>
+                  <MessageBubble
+                    message={message}
+                    currentNickname={nickname}
+                    currentUserId={currentUserId}
+                    onReply={handleReply}
+                    onEdit={handleEdit}
+                    onDelete={handleDeleteMessage}
+                    onReaction={handleReaction}
+                    onJumpToMessage={handleJumpToMessage}
+                    allMessages={messages}
+                  />
+                </div>
+              ))
+            )}
+            <div ref={messagesEndRef} />
+          </div>
         </div>
-      </ScrollArea>
+      </div>
 
-      {/* Input Area */}
-      <div 
-        className="border-t bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80"
-        style={{ 
-          paddingBottom: keyboardOffset > 0 ? `${keyboardOffset}px` : 'env(safe-area-inset-bottom, 0px)'
-        }}
-      >
+      {/* Input Area - naturally at the bottom of the flex column */}
+      <div className="shrink-0 border-t bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80 z-40">
         <div className="max-w-4xl mx-auto p-4 space-y-3">
           {/* Reply Preview */}
           {replyingTo && (
             <div className="flex items-center gap-2 p-2 bg-muted/50 rounded-lg text-sm">
-              <span className="text-muted-foreground">Replying to {replyingTo.nickname}:</span>
+              <span className="text-muted-foreground">
+                Replying to {replyingTo.nickname}:
+              </span>
               <span className="flex-1 truncate">{replyingTo.content}</span>
               <Button
                 variant="ghost"
@@ -430,11 +550,7 @@ export default function ChatRoom({ roomId, nickname }: ChatRoomProps) {
           {editingMessage && (
             <div className="flex items-center gap-2 p-2 bg-primary/10 rounded-lg text-sm">
               <span className="text-primary font-medium">Editing message</span>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={handleCancelEdit}
-              >
+              <Button variant="ghost" size="sm" onClick={handleCancelEdit}>
                 Cancel
               </Button>
             </div>
@@ -444,7 +560,7 @@ export default function ChatRoom({ roomId, nickname }: ChatRoomProps) {
           {selectedImage && (
             <div className="relative inline-block">
               <img
-                src={selectedImage.getDirectURL()}
+                src={selectedImage.file.getDirectURL()}
                 alt="Selected"
                 className="h-20 w-20 object-cover rounded-lg"
               />
@@ -461,159 +577,161 @@ export default function ChatRoom({ roomId, nickname }: ChatRoomProps) {
 
           {/* Input Form */}
           <form onSubmit={handleSendMessage} className="flex items-end gap-2">
-            <div className="flex-1 flex items-end gap-2">
-              {/* Media Buttons */}
-              <div className="flex gap-1">
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => setShowMediaPicker(!showMediaPicker)}
-                  disabled={isSending || editingMessage !== null}
-                >
-                  <ImageIcon className="h-5 w-5" />
-                </Button>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => setShowAudioRecorder(!showAudioRecorder)}
-                  disabled={isSending || editingMessage !== null}
-                >
-                  <Mic className="h-5 w-5" />
-                </Button>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => setShowVideoRecorder(!showVideoRecorder)}
-                  disabled={isSending || editingMessage !== null}
-                >
-                  <Video className="h-5 w-5" />
-                </Button>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => setShowEmojiPicker(!showEmojiPicker)}
+            <div className="flex-1 flex flex-col gap-2">
+              <div className="flex items-end gap-2">
+                <Textarea
+                  ref={inputRef}
+                  data-ocid="chat.textarea"
+                  placeholder="Type a message… (Shift+Enter for new line)"
+                  value={messageInput}
+                  rows={1}
+                  onChange={handleTextareaChange}
+                  onKeyDown={handleKeyDown}
+                  onPaste={handlePaste}
                   disabled={isSending}
+                  className="flex-1 resize-none overflow-y-auto min-h-[40px] max-h-[120px] py-2 leading-5"
+                  style={{ height: "auto" }}
+                />
+                <Button
+                  type="submit"
+                  size="icon"
+                  disabled={
+                    isSending || (!messageInput.trim() && !selectedImage)
+                  }
                 >
-                  <Smile className="h-5 w-5" />
+                  {isSending ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Send className="h-4 w-4" />
+                  )}
                 </Button>
               </div>
 
-              {/* Message Input */}
-              <Input
-                ref={inputRef}
-                value={messageInput}
-                onChange={(e) => setMessageInput(e.target.value)}
-                onKeyDown={handleKeyDown}
-                placeholder={editingMessage ? "Edit your message..." : "Type a message..."}
-                className="flex-1"
-                disabled={isSending}
-              />
-            </div>
+              {/* Toolbar */}
+              <div className="flex items-center gap-1">
+                {/* Emoji Picker */}
+                <div className="relative">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8"
+                    onClick={() => setShowEmojiPicker(!showEmojiPicker)}
+                    title="Add emoji"
+                  >
+                    <Smile className="h-4 w-4" />
+                  </Button>
+                  {showEmojiPicker && (
+                    <div className="absolute bottom-full left-0 mb-2 z-50">
+                      <EmojiPicker
+                        onSelect={handleEmojiSelect}
+                        onClose={() => setShowEmojiPicker(false)}
+                      />
+                    </div>
+                  )}
+                </div>
 
-            {/* Send/Edit Button */}
-            <Button 
-              type="submit" 
-              size="icon"
-              disabled={isSending || (!messageInput.trim() && !selectedImage)}
-              onClick={editingMessage ? handleEditMessage : undefined}
-            >
-              {isSending ? (
-                <Loader2 className="h-5 w-5 animate-spin" />
-              ) : (
-                <Send className="h-5 w-5" />
-              )}
-            </Button>
+                {/* Image Upload */}
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8"
+                  onClick={() => fileInputRef.current?.click()}
+                  title="Upload image"
+                >
+                  <ImageIcon className="h-4 w-4" />
+                </Button>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={handleImageFileSelect}
+                />
+
+                {/* Audio Recorder */}
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8"
+                  onClick={() => {
+                    setShowAudioRecorder(!showAudioRecorder);
+                    setShowVideoRecorder(false);
+                    setShowVideoUploader(false);
+                  }}
+                  title="Record audio"
+                >
+                  <Mic className="h-4 w-4" />
+                </Button>
+
+                {/* Video Recorder */}
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8"
+                  onClick={() => {
+                    setShowVideoRecorder(!showVideoRecorder);
+                    setShowAudioRecorder(false);
+                    setShowVideoUploader(false);
+                  }}
+                  title="Record video"
+                >
+                  <Video className="h-4 w-4" />
+                </Button>
+
+                {/* Video Upload */}
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8"
+                  onClick={() => {
+                    setShowVideoUploader(!showVideoUploader);
+                    setShowAudioRecorder(false);
+                    setShowVideoRecorder(false);
+                  }}
+                  title="Upload video"
+                >
+                  <Upload className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
           </form>
-        </div>
-      </div>
 
-      {/* Emoji Picker Overlay */}
-      {showEmojiPicker && (
-        <div className="absolute bottom-20 left-4 z-50">
-          <EmojiPicker
-            onSelect={handleEmojiSelect}
-            onClose={() => setShowEmojiPicker(false)}
-          />
-        </div>
-      )}
-
-      {/* Media Picker Overlay */}
-      {showMediaPicker && (
-        <div className="absolute bottom-20 left-4 z-50">
-          <MediaPicker
-            onSelect={handleMediaSelect}
-            onClose={() => setShowMediaPicker(false)}
-          />
-        </div>
-      )}
-
-      {/* Audio Recorder Overlay */}
-      {showAudioRecorder && (
-        <div className="absolute inset-0 bg-background/95 backdrop-blur z-50 flex items-center justify-center p-4">
-          <AudioRecorder
-            onSend={handleSendAudio}
-            onClose={() => setShowAudioRecorder(false)}
-          />
-        </div>
-      )}
-
-      {/* Video Recorder Overlay */}
-      {showVideoRecorder && (
-        <div className="absolute inset-0 bg-background/95 backdrop-blur z-50 flex items-center justify-center p-4">
-          <div className="w-full max-w-2xl space-y-4">
-            <div className="flex justify-between items-center">
-              <h3 className="text-lg font-semibold">Record or Upload Video</h3>
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => {
-                  setShowVideoRecorder(false);
-                  setShowVideoUploader(false);
-                }}
-              >
-                <X className="h-5 w-5" />
-              </Button>
-            </div>
-            
-            <div className="flex gap-2 justify-center">
-              <Button
-                variant={!showVideoUploader ? "default" : "outline"}
-                onClick={() => setShowVideoUploader(false)}
-              >
-                Record Video
-              </Button>
-              <Button
-                variant={showVideoUploader ? "default" : "outline"}
-                onClick={() => setShowVideoUploader(true)}
-              >
-                Upload Video
-              </Button>
-            </div>
-
-            {showVideoUploader ? (
-              <VideoUploader
-                onSend={handleSendVideo}
-                onClose={() => {
-                  setShowVideoRecorder(false);
-                  setShowVideoUploader(false);
-                }}
+          {/* Audio Recorder Panel */}
+          {showAudioRecorder && (
+            <div className="border rounded-lg p-3 bg-muted/30">
+              <AudioRecorder
+                onSend={handleSendAudio}
+                onClose={() => setShowAudioRecorder(false)}
               />
-            ) : (
+            </div>
+          )}
+
+          {/* Video Recorder Panel */}
+          {showVideoRecorder && (
+            <div className="border rounded-lg p-3 bg-muted/30">
               <VideoRecorder
                 onSend={handleSendVideo}
-                onClose={() => {
-                  setShowVideoRecorder(false);
-                  setShowVideoUploader(false);
-                }}
+                onClose={() => setShowVideoRecorder(false)}
               />
-            )}
-          </div>
+            </div>
+          )}
+
+          {/* Video Uploader Panel */}
+          {showVideoUploader && (
+            <div className="border rounded-lg p-3 bg-muted/30">
+              <VideoUploader
+                onSend={handleSendVideo}
+                onClose={() => setShowVideoUploader(false)}
+              />
+            </div>
+          )}
         </div>
-      )}
+      </div>
     </div>
   );
 }
